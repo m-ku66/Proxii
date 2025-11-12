@@ -1,8 +1,15 @@
 import './index.css';
 import { createRoot } from 'react-dom/client';
 import { Layout } from './components/Layout';
+import { useEffect } from 'react';
+import { initializeApp } from '@/utils/initialization';
+
 
 const App = () => {
+  useEffect(() => {
+    initializeApp();
+  }, []);
+
   return <Layout />;
 };
 

@@ -4,10 +4,12 @@ import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Switch } from './ui/switch';
+import { Label } from './ui/label';
 import { Paperclip, Settings, Send } from 'lucide-react';
 
 interface InputComponentProps {
-    onSubmit?: (message: string, model: string) => void;
+    onSubmit?: (message: string, model: string, thinkingEnabled?: boolean) => void;
     onFileUpload?: (file: File) => void;
 }
 
@@ -16,10 +18,11 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const [selectedModel, setSelectedModel] = useState('claude-3.5-sonnet');
     const [temperature, setTemperature] = useState(0.7);
     const [maxTokens, setMaxTokens] = useState(4000);
+    const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
     const handleSubmit = () => {
         if (message.trim()) {
-            onSubmit?.(message, selectedModel);
+            onSubmit?.(message, selectedModel, thinkingEnabled);
             setMessage('');
         }
     };
@@ -77,34 +80,53 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                             <div className="space-y-4">
                                 <h4 className="font-medium">Model Settings</h4>
 
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">
-                                        Temperature: {temperature}
-                                    </label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="1"
-                                        step="0.1"
-                                        value={temperature}
-                                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                                        className="w-full"
+                                {/* Extended Thinking Toggle */}
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="thinking-mode" className="text-sm font-medium">
+                                            Extended Thinking
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Enable deeper reasoning for complex tasks
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="thinking-mode"
+                                        checked={thinkingEnabled}
+                                        onCheckedChange={setThinkingEnabled}
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">
-                                        Max Tokens: {maxTokens}
-                                    </label>
-                                    <input
-                                        type="range"
-                                        min="1000"
-                                        max="8000"
-                                        step="100"
-                                        value={maxTokens}
-                                        onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                                        className="w-full"
-                                    />
+                                <div className="border-t pt-4 space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">
+                                            Temperature: {temperature}
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="1"
+                                            step="0.1"
+                                            value={temperature}
+                                            onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                                            className="w-full"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">
+                                            Max Tokens: {maxTokens}
+                                        </label>
+                                        <input
+                                            type="range"
+                                            min="1000"
+                                            max="8000"
+                                            step="100"
+                                            value={maxTokens}
+                                            onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                                            className="w-full"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </PopoverContent>

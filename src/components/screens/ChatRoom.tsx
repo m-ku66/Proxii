@@ -60,7 +60,7 @@ export const ChatRoom = () => {
     return (
         <div className="flex h-full flex-col">
             {/* Top bar */}
-            <div className="flex items-center justify-between border-b px-6 py-4">
+            <div className="flex items-center border-b px-6 py-4">
                 <h1 className="text-xl font-semibold">{activeConversation.title}</h1>
 
                 <DropdownMenu>

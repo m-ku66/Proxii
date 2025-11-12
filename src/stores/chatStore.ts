@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { calculateMessageMetrics } from "@/utils/tokenUtils";
 
 // Types
 export interface Message {
@@ -25,9 +26,53 @@ interface ChatStore {
   activeConversationId: string | null;
   setActiveConversation: (id: string) => void;
   createNewChat: (title: string, firstMessage?: Message) => void;
-  addMessage: (conversationId: string, message: Message) => void;
+  addMessage: (
+    conversationId: string,
+    content: string,
+    role: "user" | "assistant",
+    model?: string
+  ) => void;
   toggleStar: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => void;
+}
+
+// Helper function to create a message with calculated tokens/cost
+function createMessage(
+  content: string,
+  role: "user" | "assistant",
+  model?: string
+): Message {
+  const { tokens, cost } = calculateMessageMetrics(content, role, model);
+
+  return {
+    id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    role,
+    content,
+    timestamp: new Date(),
+    model,
+    tokens,
+    cost,
+  };
+}
+
+// Calculate tokens for all messages in a conversation
+export function calculateConversationTokens(
+  conversation: Conversation
+): Conversation {
+  return {
+    ...conversation,
+    messages: conversation.messages.map((msg) => {
+      // Skip if already has tokens
+      if (msg.tokens) return msg;
+
+      const { tokens, cost } = calculateMessageMetrics(
+        msg.content,
+        msg.role,
+        msg.model
+      );
+      return { ...msg, tokens, cost };
+    }),
+  };
 }
 
 // Mock conversations for development
@@ -422,8 +467,13 @@ const mockConversations: Conversation[] = [
   },
 ];
 
+// Pre-calculate tokens and costs for all conversations
+const processedMockConversations = mockConversations.map(
+  calculateConversationTokens
+);
+
 export const useChatStore = create<ChatStore>((set, get) => ({
-  conversations: mockConversations,
+  conversations: processedMockConversations, // Use processed mock/real data
   activeConversationId: null,
 
   setActiveConversation: (id) => {
@@ -445,13 +495,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  addMessage: (conversationId, message) => {
+  // Updated addMessage to automatically calculate tokens and cost
+  addMessage: (conversationId, content, role, model) => {
+    const newMessage = createMessage(content, role, model);
+
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
           ? {
               ...conv,
-              messages: [...conv.messages, message],
+              messages: [...conv.messages, newMessage],
               updatedAt: new Date(),
             }
           : conv

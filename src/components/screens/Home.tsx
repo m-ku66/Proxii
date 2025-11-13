@@ -1,10 +1,40 @@
 import { InputComponent } from '../InputComponent';
+import { useChatStore } from '@/stores/chatStore';
+import { useUIStore } from '@/stores/uiStore';
 
 export const Home = () => {
-    const handleSubmit = (message: string, model: string) => {
-        console.log('Message:', message);
-        console.log('Model:', model);
-        // TODO: Handle message submission
+    const { createNewChat, sendMessage } = useChatStore();
+    const { setActiveScreen } = useUIStore();
+
+    const handleSubmit = async (
+        message: string,
+        model: string,
+        thinkingEnabled?: boolean,
+        options?: {
+            temperature: number;
+            max_tokens: number;
+        }
+    ) => {
+        // Create a new chat with the first message as the title (truncated)
+        const title = message.length > 50 ? message.substring(0, 50) + '...' : message;
+
+        // Create the new chat
+        createNewChat(title);
+
+        // Get the newly created chat ID (it's the first one now)
+        const newChatId = useChatStore.getState().conversations[0]?.id;
+
+        if (newChatId) {
+            try {
+                // Send the message
+                await sendMessage(newChatId, message, model, options);
+
+                // Navigate to chat room
+                setActiveScreen('chatRoom');
+            } catch (error) {
+                console.error('Failed to send message:', error);
+            }
+        }
     };
 
     const handleFileUpload = (file: File) => {

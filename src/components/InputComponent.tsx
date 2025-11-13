@@ -10,7 +10,15 @@ import { Label } from './ui/label';
 import { Paperclip, Settings, Send } from 'lucide-react';
 
 interface InputComponentProps {
-    onSubmit?: (message: string, model: string, thinkingEnabled?: boolean) => void;
+    onSubmit?: (
+        message: string,
+        model: string,
+        thinkingEnabled?: boolean,
+        options?: {
+            temperature: number;
+            max_tokens: number;
+        }
+    ) => void;
     onFileUpload?: (file: File) => void;
 }
 
@@ -28,7 +36,10 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
 
     const handleSubmit = () => {
         if (message.trim() && selectedModel) {
-            onSubmit?.(message, selectedModel, thinkingEnabled);
+            onSubmit?.(message, selectedModel, thinkingEnabled, {
+                temperature,
+                max_tokens: maxTokens,
+            });
             setMessage('');
         }
     };

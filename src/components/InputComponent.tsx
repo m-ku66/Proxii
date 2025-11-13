@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useModelStore } from '@/stores/modelStore';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
@@ -14,14 +15,19 @@ interface InputComponentProps {
 }
 
 export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) => {
+    const { getUserModels } = useModelStore();
+    const userModels = getUserModels();
+
     const [message, setMessage] = useState('');
-    const [selectedModel, setSelectedModel] = useState('claude-3.5-sonnet');
+    const [selectedModel, setSelectedModel] = useState(
+        userModels.length > 0 ? userModels[0].id : ''
+    );
     const [temperature, setTemperature] = useState(0.7);
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
     const handleSubmit = () => {
-        if (message.trim()) {
+        if (message.trim() && selectedModel) {
             onSubmit?.(message, selectedModel, thinkingEnabled);
             setMessage('');
         }
@@ -136,18 +142,25 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                 {/* Right: Model Select + Submit */}
                 <ButtonGroup>
                     <Select value={selectedModel} onValueChange={setSelectedModel}>
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-[200px] [&>span]:truncate">
                             <SelectValue placeholder="Select model" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="claude-3.5-sonnet">Claude 3.5 Sonnet</SelectItem>
-                            <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                            <SelectItem value="gpt-4">GPT-4</SelectItem>
-                            <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                            {userModels.length > 0 ? (
+                                userModels.map((model) => (
+                                    <SelectItem key={model.id} value={model.id}>
+                                        {model.name}
+                                    </SelectItem>
+                                ))
+                            ) : (
+                                <SelectItem value=" " disabled>
+                                    No models - Add in Settings
+                                </SelectItem>
+                            )}
                         </SelectContent>
                     </Select>
 
-                    <Button onClick={handleSubmit} disabled={!message.trim()}>
+                    <Button onClick={handleSubmit} disabled={!message.trim() || !selectedModel}>
                         <Send className="h-4 w-4" />
                     </Button>
                 </ButtonGroup>

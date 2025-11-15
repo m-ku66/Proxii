@@ -24,13 +24,10 @@ interface InputComponentProps {
 }
 
 export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) => {
-    const { getUserModels } = useModelStore();
+    const { getUserModels, selectedModelId, setSelectedModel } = useModelStore();
     const userModels = getUserModels();
 
     const [message, setMessage] = useState('');
-    const [selectedModel, setSelectedModel] = useState(
-        userModels.length > 0 ? userModels[0].id : ''
-    );
     const [temperature, setTemperature] = useState(0.7);
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabled] = useState(false);
@@ -38,6 +35,13 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const MAX_HEIGHT = 200; // px, tweak to taste
+
+    // Auto-select first model if nothing is selected
+    useEffect(() => {
+        if (!selectedModelId && userModels.length > 0) {
+            setSelectedModel(userModels[0].id);
+        }
+    }, [selectedModelId, userModels, setSelectedModel]);
 
     // Auto-resize textarea based on content
     const adjustTextareaHeight = () => {
@@ -62,8 +66,8 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     }, [message]);
 
     const handleSubmit = () => {
-        if (message.trim() && selectedModel) {
-            onSubmit?.(message, selectedModel, thinkingEnabled, {
+        if (message.trim() && selectedModelId) {
+            onSubmit?.(message, selectedModelId, thinkingEnabled, {
                 temperature,
                 max_tokens: maxTokens,
             });
@@ -182,7 +186,7 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
 
                 {/* Right: Model Select + Submit */}
                 <ButtonGroup>
-                    <Select value={selectedModel} onValueChange={setSelectedModel}>
+                    <Select value={selectedModelId as string} onValueChange={setSelectedModel}>
                         <SelectTrigger className="w-[200px] [&>span]:truncate">
                             <SelectValue placeholder="Select model" />
                         </SelectTrigger>
@@ -201,7 +205,7 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                         </SelectContent>
                     </Select>
 
-                    <Button onClick={handleSubmit} disabled={!message.trim() || !selectedModel}>
+                    <Button onClick={handleSubmit} disabled={!message.trim() || !selectedModelId}>
                         <Send className="h-4 w-4" />
                     </Button>
                 </ButtonGroup>

@@ -249,7 +249,13 @@ export const ChatRoom = () => {
                             <div className="flex justify-between items-center p-3 bg-muted rounded">
                                 <span className="text-sm text-muted-foreground">Total Cost</span>
                                 <span className="font-mono font-medium">
-                                    ${getTotalCost().toFixed(4)}
+                                    {(() => {
+                                        const cost = getTotalCost();
+                                        if (cost === 0) return '$0.00';
+                                        if (cost < 0.0001) return `< $0.0001`;
+                                        if (cost < 0.01) return `$${cost.toFixed(6)}`;
+                                        return `$${cost.toFixed(4)}`;
+                                    })()}
                                 </span>
                             </div>
                         </div>

@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import { calculateMessageMetrics } from "@/utils/tokenUtils";
-import {
-  sendChatCompletion,
-  calculateCostFromUsage,
-} from "@/services/apiService";
+import { sendChatCompletion } from "@/services/apiService";
+import { useModelStore } from "@/stores/modelStore";
 
 // Types
 export interface Message {
@@ -193,11 +191,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         throw new Error("No response from API");
       }
 
+      // Debug right before the cost calculation:
+      // console.log("🔍 DEBUG - Model:", model);
+      // console.log(
+      //   "🔍 DEBUG - Available models count:",
+      //   useModelStore.getState().availableModels.length
+      // );
       // Calculate cost using actual token usage from API
-      // We'll need to import pricing data - for now using approximate
-      const inputCost = (usage.prompt_tokens / 1_000_000) * 3.0; // Approximate
-      const outputCost = (usage.completion_tokens / 1_000_000) * 15.0; // Approximate
-      const totalCost = inputCost + outputCost;
+      // Calculate cost using ACTUAL pricing from OpenRouter
+      const modelData = useModelStore
+        .getState()
+        .availableModels.find((m) => m.id === model);
+      // Debug model data and pricing
+      // console.log("🔍 DEBUG - Found model data:", modelData);
+      // console.log("🔍 DEBUG - Pricing:", modelData?.pricing);
+      // console.log("🔍 DEBUG - Usage:", usage);
+
+      let totalCost = 0;
+
+      if (modelData?.pricing) {
+        // Parse pricing strings to numbers (e.g. "0" → 0, "0.000003" → 0.000003)
+        const promptPrice = parseFloat(modelData.pricing.prompt);
+        const completionPrice = parseFloat(modelData.pricing.completion);
+
+        // Calculate actual cost
+        const inputCost = (usage.prompt_tokens / 1_000_000) * promptPrice;
+        const outputCost =
+          (usage.completion_tokens / 1_000_000) * completionPrice;
+        totalCost = inputCost + outputCost;
+      } else {
+        // Fallback if model not found (shouldn't happen, but safety first!)
+        console.warn(
+          `Model ${model} not found in availableModels, using fallback pricing`
+        );
+        const inputCost = (usage.prompt_tokens / 1_000_000) * 3.0;
+        const outputCost = (usage.completion_tokens / 1_000_000) * 15.0;
+        totalCost = inputCost + outputCost;
+      }
 
       // Add assistant message with REAL token counts from API
       get().addMessage(

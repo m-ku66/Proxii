@@ -26,6 +26,9 @@ interface ModelStore {
   // User's selected model IDs (persisted)
   userModelIds: string[];
 
+  // Currently selected model
+  selectedModelId: string | null;
+
   // Loading state
   loading: boolean;
   error: string | null;
@@ -39,6 +42,7 @@ interface ModelStore {
   getUserModels: () => Model[];
   clearError: () => void;
   resetToDefaults: () => void;
+  setSelectedModel: (modelId: string) => void;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -52,6 +56,7 @@ export const useModelStore = create<ModelStore>()(
         "kwaipilot/kat-coder-pro:free",
         "deepseek/deepseek-chat-v3.1:free",
       ],
+      selectedModelId: null,
       loading: false,
       error: null,
       lastFetched: null,
@@ -141,12 +146,17 @@ export const useModelStore = create<ModelStore>()(
           ],
         });
       },
+
+      setSelectedModel: (modelId: string) => {
+        set({ selectedModelId: modelId });
+      },
     }),
     {
       name: "proxii-models",
       partialize: (state) => ({
         userModelIds: state.userModelIds,
         lastFetched: state.lastFetched,
+        selectedModelId: state.selectedModelId,
       }),
     }
   )

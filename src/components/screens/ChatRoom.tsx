@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, Star, Edit, Download, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 
 export const ChatRoom = () => {
     const {
@@ -110,8 +111,8 @@ export const ChatRoom = () => {
                         >
                             <Star
                                 className={`h-4 w-4 ${activeConversation.starred
-                                        ? 'fill-yellow-400 text-yellow-400'
-                                        : ''
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : ''
                                     }`}
                             />
                             {activeConversation.starred ? 'Unstar' : 'Star'} Chat
@@ -141,12 +142,31 @@ export const ChatRoom = () => {
                             >
                                 <div
                                     className={`max-w-[80%] rounded-lg p-4 ${message.role === 'user'
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted'
                                         }`}
                                 >
-                                    <div className="whitespace-pre-wrap break-words">
-                                        {message.content}
+                                    <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                                        <ReactMarkdown
+                                            components={{
+                                                // Inline code
+                                                code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
+                                                    inline ? (
+                                                        <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
+                                                            {children}
+                                                        </code>
+                                                    ) : (
+                                                        <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
+                                                            {children}
+                                                        </code>
+                                                    )
+                                                ),
+                                                // Preserve line breaks and spacing
+                                                p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
+                                            }}
+                                        >
+                                            {message.content}
+                                        </ReactMarkdown>
                                     </div>
                                     {message.model && (
                                         <div className="text-xs opacity-70 mt-2">

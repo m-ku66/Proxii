@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useModelStore } from '@/stores/modelStore';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -34,6 +35,32 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const MAX_HEIGHT = 200; // px, tweak to taste
+
+    // Auto-resize textarea based on content
+    const adjustTextareaHeight = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        textarea.style.height = "auto"; // reset first
+        const newHeight = textarea.scrollHeight;
+
+        if (newHeight > MAX_HEIGHT) {
+            textarea.style.height = `${MAX_HEIGHT}px`;
+            textarea.style.overflowY = "auto";
+        } else {
+            textarea.style.height = `${newHeight}px`;
+            textarea.style.overflowY = "hidden";
+        }
+    };
+
+    // Adjust height when message changes
+    useEffect(() => {
+        adjustTextareaHeight();
+    }, [message]);
+
     const handleSubmit = () => {
         if (message.trim() && selectedModel) {
             onSubmit?.(message, selectedModel, thinkingEnabled, {
@@ -65,13 +92,16 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
 
     return (
         <div className="w-full max-w-3xl mx-auto space-y-2">
-            {/* Input Field */}
-            <Input
-                placeholder="Type your message..."
+            {/* Textarea Field */}
+            <Textarea
+                ref={textareaRef}
+                placeholder="Type your message... (Shift+Enter for new line)"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full"
+                className="w-full min-h-[60px] resize-none"
+                rows={2}
+                spellCheck={true}
             />
 
             {/* Bottom Controls */}

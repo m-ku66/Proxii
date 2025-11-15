@@ -4,6 +4,7 @@
  */
 
 import { useSettingsStore } from "@/stores/settingsStore";
+import { sanitizeMessageContent } from "@/utils/messageUtils";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -85,7 +86,16 @@ export async function sendChatCompletion(
     );
   }
 
-  return await response.json();
+  const data: ChatCompletionResponse = await response.json();
+
+  // Clean special tokens from the response content
+  if (data.choices && data.choices.length > 0) {
+    data.choices[0].message.content = sanitizeMessageContent(
+      data.choices[0].message.content
+    );
+  }
+
+  return data;
 }
 
 /**

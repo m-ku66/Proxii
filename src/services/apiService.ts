@@ -1,6 +1,7 @@
 /**
  * OpenRouter API Service
  * Handles chat completion requests to OpenRouter API
+ * Now with streaming support!
  */
 
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -46,8 +47,37 @@ export interface ChatCompletionError {
   };
 }
 
+// Streaming types
+export interface StreamChunk {
+  id: string;
+  model: string;
+  choices: Array<{
+    delta: {
+      content?: string;
+      reasoning?: string; // Some models (like o1) send thinking here
+    };
+    finish_reason?: string | null;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+export interface StreamCallbacks {
+  onContent?: (content: string) => void;
+  onThinking?: (thinking: string) => void;
+  onComplete?: (usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  }) => void;
+  onError?: (error: Error) => void;
+}
+
 /**
- * Send a chat completion request to OpenRouter
+ * Send a chat completion request to OpenRouter (non-streaming)
  */
 export async function sendChatCompletion(
   request: ChatCompletionRequest
@@ -96,6 +126,126 @@ export async function sendChatCompletion(
   }
 
   return data;
+}
+
+/**
+ * Send a chat completion request with streaming
+ * Streams the response in real-time via callbacks
+ */
+export async function sendChatCompletionStream(
+  request: ChatCompletionRequest,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  const apiKey = useSettingsStore.getState().openRouterApiKey;
+
+  if (!apiKey) {
+    const error = new Error(
+      "No API key found. Please set your OpenRouter API key in settings."
+    );
+    callbacks.onError?.(error);
+    throw error;
+  }
+
+  try {
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://proxii.app",
+          "X-Title": "Proxii",
+        },
+        body: JSON.stringify({
+          ...request,
+          stream: true, // Enable streaming!
+          route: "fallback",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData: ChatCompletionError = await response.json();
+      const error = new Error(
+        errorData.error?.message || `API request failed: ${response.status}`
+      );
+      callbacks.onError?.(error);
+      throw error;
+    }
+
+    // Get the response body as a readable stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Response body is not readable");
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    // Read the stream
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      // Decode the chunk and add to buffer
+      buffer += decoder.decode(value, { stream: true });
+
+      // Split by newlines to process complete SSE messages
+      const lines = buffer.split("\n");
+
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || "";
+
+      // Process each complete line
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Skip empty lines and comments
+        if (!trimmed || trimmed.startsWith(":")) continue;
+
+        // SSE format: "data: {json}"
+        if (trimmed.startsWith("data: ")) {
+          const data = trimmed.slice(6); // Remove "data: " prefix
+
+          // Check for stream end
+          if (data === "[DONE]") {
+            continue;
+          }
+
+          try {
+            const chunk: StreamChunk = JSON.parse(data);
+
+            // Extract content and thinking from delta
+            const delta = chunk.choices[0]?.delta;
+
+            if (delta?.content) {
+              // Send content chunks as-is, don't sanitize individual chunks!
+              callbacks.onContent?.(delta.content);
+            }
+
+            if (delta?.reasoning) {
+              // Some models send thinking/reasoning separately
+              callbacks.onThinking?.(delta.reasoning);
+            }
+
+            // Check for usage data (sent in final chunk)
+            if (chunk.usage) {
+              callbacks.onComplete?.(chunk.usage);
+            }
+          } catch (parseError) {
+            console.error("Failed to parse SSE chunk:", data, parseError);
+            // Continue processing other chunks even if one fails
+          }
+        }
+      }
+    }
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error("Unknown error");
+    callbacks.onError?.(err);
+    throw err;
+  }
 }
 
 /**

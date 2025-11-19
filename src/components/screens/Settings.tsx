@@ -399,10 +399,9 @@ export const Settings = () => {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="system-prompt">System Prompt (Optional)</Label>
                                 <Textarea
                                     id="system-prompt"
-                                    placeholder="You are a helpful assistant that..."
+                                    placeholder="Write prompts in third person e.g 'You are a helpful assistant that...'"
                                     value={systemPrompt}
                                     onChange={(e) => setSystemPrompt(e.target.value)}
                                     className="min-h-[200px] resize-none"

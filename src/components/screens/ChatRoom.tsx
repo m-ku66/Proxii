@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useUIStore } from '@/stores/uiStore';
 import { InputComponent } from '@/components/InputComponent';
@@ -8,9 +9,79 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, Star, Edit, Download, AlertCircle } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ChevronDown, Star, Edit, Download, AlertCircle, Brain, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+
+// Thinking bubble component
+const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    return (
+        <div className="mt-3 border border-neutral-500/30 bg-neutral-500/5 rounded-lg overflow-hidden mb-4 w-full">
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full flex items-center gap-2 p-3 hover:bg-neutral-500/10 transition-colors"
+            >
+                <Brain className="h-4 w-4 text-neutral-500" />
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-400">
+                    Thinking Process
+                </span>
+                <motion.div
+                    animate={{ rotate: isExpanded ? 90 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="ml-auto"
+                >
+                    <ChevronRight className="h-4 w-4 text-neutral-500" />
+                </motion.div>
+            </button>
+
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="p-3 pt-0 border-t border-neutral-500/20">
+                            <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground">
+                                <ReactMarkdown
+                                    components={{
+                                        code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
+                                            inline ? (
+                                                <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
+                                                    {children}
+                                                </code>
+                                            ) : (
+                                                <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
+                                                    {children}
+                                                </code>
+                                            )
+                                        ),
+                                        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
+                                    }}
+                                >
+                                    {thinkingTokens}
+                                </ReactMarkdown>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+};
+
+// Streaming cursor component
+const StreamingCursor = () => (
+    <motion.span
+        animate={{ opacity: [1, 0, 1] }}
+        transition={{ duration: 0.8, repeat: Infinity }}
+        className="inline-block w-2 h-4 bg-primary ml-1 rounded-sm"
+    />
+);
 
 export const ChatRoom = () => {
     const {
@@ -64,7 +135,7 @@ export const ChatRoom = () => {
         if (!activeConversationId) return;
 
         try {
-            await sendMessage(activeConversationId, message, model, options);
+            await sendMessage(activeConversationId, message, model, thinkingEnabled, options);
         } catch (error) {
             console.error('Failed to send message:', error);
         }
@@ -144,8 +215,13 @@ export const ChatRoom = () => {
                                     className={`max-w-[80%] rounded-lg p-4 ${message.role === 'user'
                                         ? 'bg-primary text-primary-foreground'
                                         : 'bg-muted'
-                                        }`}
+                                        } ${message.isStreaming ? 'animate-pulse' : ''}`}
                                 >
+                                    {/* Thinking bubble (only show if thinking tokens exist) - BEFORE the response! */}
+                                    {message.thinkingTokens && message.thinkingTokens.trim() && (
+                                        <ThinkingBubble thinkingTokens={message.thinkingTokens} />
+                                    )}
+
                                     <div className="prose prose-sm dark:prose-invert max-w-none break-words">
                                         <ReactMarkdown
                                             components={{
@@ -165,9 +241,13 @@ export const ChatRoom = () => {
                                                 p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
                                             }}
                                         >
-                                            {message.content}
+                                            {message.content || ' '}
                                         </ReactMarkdown>
+
+                                        {/* Streaming cursor */}
+                                        {message.isStreaming && <StreamingCursor />}
                                     </div>
+
                                     {message.model && (
                                         <div className="text-xs opacity-70 mt-2">
                                             {message.model}
@@ -177,8 +257,8 @@ export const ChatRoom = () => {
                             </motion.div>
                         ))}
 
-                        {/* Loading indicator */}
-                        {isLoading && (
+                        {/* Loading indicator (only show if no messages are streaming) */}
+                        {isLoading && !activeConversation.messages.some(msg => msg.isStreaming) && (
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}

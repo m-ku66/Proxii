@@ -3,12 +3,14 @@
  *
  * Functions to initialize the app on startup, including:
  * - Loading pricing data from OpenRouter
+ * - Fetching available models
  * - Setting up stores
  * - Checking for updates
  */
 
 import { initializePricing } from "./tokenUtils";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useModelStore } from "@/stores/modelStore";
 
 /**
  * Initialize the app
@@ -25,9 +27,22 @@ export async function initializeApp(): Promise<void> {
       console.log("API key found, fetching model pricing...");
       await initializePricing(apiKey);
       console.log("✓ Pricing initialized successfully");
+
+      // Also fetch models on startup
+      console.log("Fetching available models...");
+      try {
+        await useModelStore.getState().fetchModels(apiKey);
+        console.log("✓ Models loaded successfully");
+      } catch (error) {
+        console.error("Failed to fetch models on startup:", error);
+        console.log("⚠ Models can be loaded manually in Settings");
+      }
     } else {
       console.log("⚠ No API key found, using fallback pricing");
       await initializePricing(); // Will use fallback
+      console.log(
+        "⚠ Models unavailable - add API key in Settings to load models"
+      );
     }
 
     console.log("✓ App initialized successfully");

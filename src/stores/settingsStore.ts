@@ -11,6 +11,10 @@ interface SettingsStore {
   theme: "light" | "dark" | "system";
   setTheme: (theme: "light" | "dark" | "system") => void;
 
+  // Prompting Settings
+  systemPrompt: string;
+  setSystemPrompt: (prompt: string) => void;
+
   // Pricing Settings
   lastPricingUpdate: number | null;
 
@@ -42,6 +46,13 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ theme });
       },
 
+      // Prompting Settings
+      systemPrompt: "",
+
+      setSystemPrompt: (prompt: string) => {
+        set({ systemPrompt: prompt });
+      },
+
       // Pricing
       lastPricingUpdate: null,
 
@@ -57,6 +68,7 @@ export const useSettingsStore = create<SettingsStore>()(
       partialize: (state) => ({
         openRouterApiKey: state.openRouterApiKey,
         theme: state.theme,
+        systemPrompt: state.systemPrompt,
       }),
     }
   )

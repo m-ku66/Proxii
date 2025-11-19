@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { calculateMessageMetrics } from "@/utils/tokenUtils";
 import { sendChatCompletion } from "@/services/apiService";
 import { useModelStore } from "@/stores/modelStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 // Types
 export interface Message {
@@ -163,8 +164,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Add user message first
       get().addMessage(conversationId, content, "user");
 
+      // Get system prompt from settings
+      const systemPrompt = useSettingsStore.getState().systemPrompt;
+
       // Prepare messages for API (convert to API format)
-      const apiMessages = [
+      const apiMessages: Array<{
+        role: "system" | "user" | "assistant";
+        content: string;
+      }> = [
         ...conversation.messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
@@ -174,6 +181,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           content,
         },
       ];
+
+      // Prepend system prompt if it exists (only for the first message in conversation)
+      if (
+        systemPrompt &&
+        systemPrompt.trim() &&
+        conversation.messages.length === 0
+      ) {
+        apiMessages.unshift({
+          role: "system" as const,
+          content: systemPrompt,
+        });
+      }
 
       // Call OpenRouter API
       const response = await sendChatCompletion({

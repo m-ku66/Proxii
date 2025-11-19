@@ -370,22 +370,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (thinkingEnabled && thinkingCapability) {
         switch (thinkingCapability) {
           case "reasoning_effort":
-            // OpenAI o1 models
-            requestParams.reasoning_effort = "high";
+            // OpenAI o1 models use reasoning.effort
+            requestParams.reasoning = {
+              effort: "high",
+            };
             break;
 
           case "thinking":
-            // Claude models with extended thinking
-            requestParams.thinking = {
-              type: "enabled",
-              budget_tokens: 10000, // Max thinking tokens
+            // Claude models use reasoning.max_tokens
+            requestParams.reasoning = {
+              max_tokens: 1024,
             };
             break;
 
           case "max_reasoning_tokens":
-            // Gemini 2.5 models
-            requestParams.thinking = {
-              max_tokens_for_reasoning: 8000, // Configurable reasoning depth
+            // Gemini models use reasoning.max_tokens
+            requestParams.reasoning = {
+              max_tokens: 8000,
             };
             break;
 

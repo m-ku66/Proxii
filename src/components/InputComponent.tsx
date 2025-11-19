@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useModelStore } from '@/stores/modelStore';
-import { Input } from './ui/input';
+import { supportsThinking } from '@/stores/chatStore';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
@@ -36,12 +36,25 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
 
     const MAX_HEIGHT = 200; // px, tweak to taste
 
+    // Check if selected model supports thinking
+    const thinkingCapability = supportsThinking(selectedModelId || '');
+
     // Auto-select first model if nothing is selected
     useEffect(() => {
         if (!selectedModelId && userModels.length > 0) {
             setSelectedModel(userModels[0].id);
         }
     }, [selectedModelId, userModels, setSelectedModel]);
+
+    // Auto-disable thinking toggle when switching to non-thinking model
+    // Auto-enable for 'always' thinking models like DeepSeek
+    useEffect(() => {
+        if (thinkingCapability === 'always') {
+            setThinkingEnabled(true);
+        } else if (!thinkingCapability) {
+            setThinkingEnabled(false);
+        }
+    }, [selectedModelId, thinkingCapability]);
 
     // Auto-resize textarea based on content
     const adjustTextareaHeight = () => {
@@ -94,6 +107,22 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
         input.click();
     };
 
+    // Get helper text based on thinking capability
+    const getThinkingHelperText = () => {
+        switch (thinkingCapability) {
+            case 'always':
+                return 'This model always uses extended thinking';
+            case 'reasoning_effort':
+                return 'Enable deeper reasoning with o1 thinking mode';
+            case 'thinking':
+                return 'Enable Claude extended thinking (up to 10k tokens)';
+            case 'max_reasoning_tokens':
+                return 'Enable Gemini reasoning mode (up to 8k tokens)';
+            default:
+                return 'This model does not support extended thinking';
+        }
+    };
+
     return (
         <div className="w-full max-w-3xl mx-auto space-y-2">
             {/* Textarea Field */}
@@ -136,15 +165,21 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                                     <div className="space-y-0.5">
                                         <Label htmlFor="thinking-mode" className="text-sm font-medium">
                                             Extended Thinking
+                                            {thinkingCapability === 'always' && (
+                                                <span className="ml-2 text-xs font-normal text-green-500">
+                                                    (Always On)
+                                                </span>
+                                            )}
                                         </Label>
                                         <p className="text-xs text-muted-foreground">
-                                            Enable deeper reasoning for complex tasks
+                                            {getThinkingHelperText()}
                                         </p>
                                     </div>
                                     <Switch
                                         id="thinking-mode"
                                         checked={thinkingEnabled}
                                         onCheckedChange={setThinkingEnabled}
+                                        disabled={!thinkingCapability || thinkingCapability === 'always'}
                                     />
                                 </div>
 

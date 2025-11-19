@@ -212,7 +212,7 @@ export const ChatRoom = () => {
                                     }`}
                             >
                                 <div
-                                    className={`max-w-[80%] rounded-lg p-4 ${message.role === 'user'
+                                    className={`max-w-[80%] w-full rounded-lg p-4 ${message.role === 'user'
                                         ? 'bg-primary text-primary-foreground'
                                         : 'bg-muted'
                                         } ${message.isStreaming ? 'animate-pulse' : ''}`}

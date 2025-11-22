@@ -559,7 +559,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // Resend the message
+    // Now directly call sendMessage with the original content
     try {
       await get().sendMessage(conversationId, message.content, modelToUse);
     } catch (error) {
@@ -590,17 +590,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return;
     }
 
-    // Find the user message that prompted this response
-    const userMessage = conversation.messages
-      .slice(0, messageIndex)
-      .reverse()
-      .find((msg) => msg.role === "user");
-
-    if (!userMessage) {
-      console.error("Cannot find user message to regenerate from");
-      return;
-    }
-
     const modelToUse =
       targetMessage.model || useModelStore.getState().selectedModelId;
     if (!modelToUse) {
@@ -619,11 +608,151 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // Regenerate the response
+    // Set loading state
+    set({ isLoading: true, error: null });
+
+    // Create a unique ID for the assistant message
+    const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     try {
-      await get().sendMessage(conversationId, userMessage.content, modelToUse);
+      // Get system prompt from settings
+      const systemPrompt = useSettingsStore.getState().systemPrompt;
+
+      // Prepare messages for API (use existing conversation up to this point)
+      const apiMessages: Array<{
+        role: "system" | "user" | "assistant";
+        content: string;
+      }> = messagesToKeep.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      // Prepend system prompt if it exists (only for the first message in conversation)
+      if (
+        systemPrompt &&
+        systemPrompt.trim() &&
+        messagesToKeep.length === 1 && // Only one user message
+        messagesToKeep[0].role === "user"
+      ) {
+        apiMessages.unshift({
+          role: "system" as const,
+          content: systemPrompt,
+        });
+      }
+
+      // Create an empty assistant message that we'll stream into
+      const streamingMessage: Message = {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        timestamp: new Date(),
+        model: modelToUse,
+        isStreaming: true,
+        thinkingTokens: "",
+      };
+
+      // Add the streaming message to the conversation
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: [...messagesToKeep, streamingMessage],
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+      }));
+
+      // Build request parameters (preserve thinking from original message)
+      const requestParams: any = {
+        model: modelToUse,
+        messages: apiMessages,
+        temperature: 0.7,
+        max_tokens: 4000,
+      };
+
+      // Check if original message had thinking and preserve that setting
+      const thinkingCapability = supportsThinking(modelToUse);
+      const hadThinking =
+        targetMessage.thinkingTokens && targetMessage.thinkingTokens.trim();
+
+      if (hadThinking && thinkingCapability) {
+        switch (thinkingCapability) {
+          case "reasoning_effort":
+            requestParams.reasoning = { effort: "high" };
+            break;
+          case "thinking":
+            requestParams.reasoning = { max_tokens: 1024 };
+            break;
+          case "max_reasoning_tokens":
+            requestParams.reasoning = { max_tokens: 8000 };
+            break;
+          case "always":
+            // DeepSeek - always thinks
+            break;
+        }
+      }
+
+      // Stream the response
+      await sendChatCompletionStream(requestParams, {
+        onContent: (chunk) => {
+          get().updateMessageContent(conversationId, assistantMessageId, chunk);
+        },
+        onThinking: (thinking) => {
+          get().updateMessageThinking(
+            conversationId,
+            assistantMessageId,
+            thinking
+          );
+        },
+        onComplete: (usage) => {
+          const inputCost = calculateCost(
+            usage.prompt_tokens,
+            modelToUse,
+            false
+          );
+          const outputCost = calculateCost(
+            usage.completion_tokens,
+            modelToUse,
+            true
+          );
+          const totalCost = inputCost + outputCost;
+
+          get().finalizeMessage(
+            conversationId,
+            assistantMessageId,
+            usage.completion_tokens,
+            totalCost
+          );
+          set({ isLoading: false });
+        },
+        onError: (error) => {
+          set({ isLoading: false, error: error.message });
+          console.error("Regeneration error:", error);
+
+          // Remove the failed streaming message
+          set((state) => ({
+            conversations: state.conversations.map((conv) =>
+              conv.id === conversationId
+                ? {
+                    ...conv,
+                    messages: conv.messages.filter(
+                      (msg) => msg.id !== assistantMessageId
+                    ),
+                    updatedAt: new Date(),
+                  }
+                : conv
+            ),
+          }));
+        },
+      });
     } catch (error) {
       console.error("Failed to regenerate message:", error);
+      set({
+        isLoading: false,
+        error: error instanceof Error ? error.message : "Failed to regenerate",
+      });
     }
   },
 
@@ -668,50 +797,156 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // For user messages: update content, remove everything after, then resend
     if (message.role === "user") {
-      // First update the message content
-      set((state) => ({
-        conversations: state.conversations.map((conv) =>
-          conv.id === conversationId
-            ? {
-                ...conv,
-                messages: conv.messages.map((msg, idx) =>
-                  idx === messageIndex
-                    ? { ...msg, content: newContent, editedAt: new Date() }
-                    : msg
-                ),
-                updatedAt: new Date(),
-              }
-            : conv
-        ),
-      }));
-
-      // Remove all messages after the edited message
+      // Remove all messages after the edited message (but keep the edited message)
       const messagesToKeep = conversation.messages.slice(0, messageIndex + 1);
 
+      // Update the message content in the kept messages
+      const updatedMessages = messagesToKeep.map((msg, idx) =>
+        idx === messageIndex
+          ? { ...msg, content: newContent, editedAt: new Date() }
+          : msg
+      );
+
       set((state) => ({
         conversations: state.conversations.map((conv) =>
           conv.id === conversationId
             ? {
                 ...conv,
-                messages: messagesToKeep.map((msg, idx) =>
-                  idx === messageIndex
-                    ? { ...msg, content: newContent, editedAt: new Date() }
-                    : msg
-                ),
+                messages: updatedMessages,
                 updatedAt: new Date(),
               }
             : conv
         ),
       }));
 
-      // Auto-resend the edited message
-      const modelToUse = useModelStore.getState().selectedModelId;
-      if (modelToUse) {
-        try {
-          await get().sendMessage(conversationId, newContent, modelToUse);
-        } catch (error) {
-          console.error("Failed to resend edited message:", error);
+      // Set loading state
+      set({ isLoading: true, error: null });
+
+      // Create a unique ID for the assistant message
+      const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      try {
+        // Get system prompt from settings
+        const systemPrompt = useSettingsStore.getState().systemPrompt;
+
+        // Prepare messages for API (use the updated conversation)
+        const apiMessages: Array<{
+          role: "system" | "user" | "assistant";
+          content: string;
+        }> = updatedMessages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+
+        // Prepend system prompt if it exists (only for the first message)
+        if (
+          systemPrompt &&
+          systemPrompt.trim() &&
+          updatedMessages.length === 1 &&
+          updatedMessages[0].role === "user"
+        ) {
+          apiMessages.unshift({
+            role: "system" as const,
+            content: systemPrompt,
+          });
         }
+
+        // Create streaming message
+        const streamingMessage: Message = {
+          id: assistantMessageId,
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+          model: useModelStore.getState().selectedModelId || "",
+          isStreaming: true,
+          thinkingTokens: "",
+        };
+
+        // Add streaming message
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: [...updatedMessages, streamingMessage],
+                  updatedAt: new Date(),
+                }
+              : conv
+          ),
+        }));
+
+        // Build request parameters
+        const modelToUse = useModelStore.getState().selectedModelId;
+        const requestParams: any = {
+          model: modelToUse,
+          messages: apiMessages,
+          temperature: 0.7,
+          max_tokens: 4000,
+        };
+
+        // Stream the response (no thinking for edited messages by default)
+        await sendChatCompletionStream(requestParams, {
+          onContent: (chunk) => {
+            get().updateMessageContent(
+              conversationId,
+              assistantMessageId,
+              chunk
+            );
+          },
+          onThinking: (thinking) => {
+            get().updateMessageThinking(
+              conversationId,
+              assistantMessageId,
+              thinking
+            );
+          },
+          onComplete: (usage) => {
+            const inputCost = calculateCost(
+              usage.prompt_tokens,
+              modelToUse!, // should not be null here
+              false
+            );
+            const outputCost = calculateCost(
+              usage.completion_tokens,
+              modelToUse!, // should not be null here
+              true
+            );
+            const totalCost = inputCost + outputCost;
+
+            get().finalizeMessage(
+              conversationId,
+              assistantMessageId,
+              usage.completion_tokens,
+              totalCost
+            );
+            set({ isLoading: false });
+          },
+          onError: (error) => {
+            set({ isLoading: false, error: error.message });
+            console.error("Edit resend error:", error);
+
+            // Remove failed streaming message
+            set((state) => ({
+              conversations: state.conversations.map((conv) =>
+                conv.id === conversationId
+                  ? {
+                      ...conv,
+                      messages: conv.messages.filter(
+                        (msg) => msg.id !== assistantMessageId
+                      ),
+                      updatedAt: new Date(),
+                    }
+                  : conv
+              ),
+            }));
+          },
+        });
+      } catch (error) {
+        console.error("Failed to resend edited message:", error);
+        set({
+          isLoading: false,
+          error: error instanceof Error ? error.message : "Failed to resend",
+        });
       }
     }
   },

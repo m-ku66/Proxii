@@ -102,7 +102,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                     </TooltipContent>
                 </Tooltip>
 
-                {/* Edit AI Response */}
+                {/* 🔧 FIXED: AI messages are now always editable */}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Button
@@ -115,7 +115,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                        <p>Edit</p>
+                        <p>Edit AI Response</p>
                     </TooltipContent>
                 </Tooltip>
 

@@ -11,6 +11,9 @@ import {
 import { ChevronDown, Star, Edit, Download, AlertCircle, Brain, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import { MessageActions } from '@/components/MessageActions';
+import { EditMessageDialog } from '@/components/EditMessageDialog';
+
 
 // Thinking bubble component
 const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
@@ -83,6 +86,18 @@ const StreamingCursor = () => (
 );
 
 export const ChatRoom = () => {
+    const [editDialog, setEditDialog] = useState<{
+        isOpen: boolean;
+        messageId: string;
+        content: string;
+        role: 'user' | 'assistant';
+    }>({
+        isOpen: false,
+        messageId: '',
+        content: '',
+        role: 'user'
+    });
+
     const {
         conversations,
         activeConversationId,
@@ -91,6 +106,10 @@ export const ChatRoom = () => {
         isLoading,
         error,
         clearError,
+        resendMessage,
+        regenerateMessage,
+        editMessage,
+        deleteMessage
     } = useChatStore();
 
     const activeConversation = conversations.find(
@@ -182,6 +201,45 @@ export const ChatRoom = () => {
         );
     }
 
+    // Add these handler functions to your ChatRoom component
+    const handleResend = async (messageId: string) => {
+        if (!activeConversationId) return;
+        await resendMessage(activeConversationId, messageId);
+    };
+
+    const handleRegenerate = async (messageId: string) => {
+        if (!activeConversationId) return;
+        await regenerateMessage(activeConversationId, messageId);
+    };
+
+    const handleEdit = (messageId: string, content: string, role: 'user' | 'assistant') => {
+        setEditDialog({
+            isOpen: true,
+            messageId,
+            content,
+            role
+        });
+    };
+
+    const handleDelete = (messageId: string) => {
+        if (!activeConversationId) return;
+
+        // Optional: Add confirmation dialog
+        if (confirm('Are you sure you want to delete this message?')) {
+            deleteMessage(activeConversationId, messageId);
+        }
+    };
+
+    const handleEditSave = async (newContent: string) => {
+        if (!activeConversationId) return;
+        await editMessage(activeConversationId, editDialog.messageId, newContent);
+        setEditDialog({ isOpen: false, messageId: '', content: '', role: 'user' });
+    };
+
+    const handleEditCancel = () => {
+        setEditDialog({ isOpen: false, messageId: '', content: '', role: 'user' });
+    };
+
     return (
         <div className="flex h-full flex-col">
             {/* Top bar */}
@@ -230,46 +288,62 @@ export const ChatRoom = () => {
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'
                                     }`}
                             >
-                                <div
-                                    className={`max-w-[80%] w-full rounded-lg p-4 ${message.role === 'user'
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'bg-muted'
-                                        } ${message.isStreaming ? 'animate-pulse' : ''}`}
-                                >
-                                    {/* Thinking bubble (only show if thinking tokens exist) - BEFORE the response! */}
-                                    {message.thinkingTokens && message.thinkingTokens.trim() && (
-                                        <ThinkingBubble thinkingTokens={message.thinkingTokens} />
-                                    )}
+                                <div className="flex flex-col gap-2 max-w-[80%]">
+                                    <div
+                                        className={`w-full rounded-lg p-4 ${message.role === 'user'
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted'
+                                            } ${message.isStreaming ? 'animate-pulse' : ''}`}
+                                    >
+                                        {/* Thinking bubble (only show if thinking tokens exist) - BEFORE the response! */}
+                                        {message.thinkingTokens && message.thinkingTokens.trim() && (
+                                            <ThinkingBubble thinkingTokens={message.thinkingTokens} />
+                                        )}
 
-                                    <div className="prose prose-sm dark:prose-invert max-w-none break-words">
-                                        <ReactMarkdown
-                                            components={{
-                                                // Inline code
-                                                code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
-                                                    inline ? (
-                                                        <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
-                                                            {children}
-                                                        </code>
-                                                    ) : (
-                                                        <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
-                                                            {children}
-                                                        </code>
-                                                    )
-                                                ),
-                                                // Preserve line breaks and spacing
-                                                p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
-                                            }}
-                                        >
-                                            {message.content || ' '}
-                                        </ReactMarkdown>
+                                        <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                                            <ReactMarkdown
+                                                components={{
+                                                    // Inline code
+                                                    code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
+                                                        inline ? (
+                                                            <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
+                                                                {children}
+                                                            </code>
+                                                        ) : (
+                                                            <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
+                                                                {children}
+                                                            </code>
+                                                        )
+                                                    ),
+                                                    // Preserve line breaks and spacing
+                                                    p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
+                                                }}
+                                            >
+                                                {message.content || ' '}
+                                            </ReactMarkdown>
 
-                                        {/* Streaming cursor */}
-                                        {message.isStreaming && <StreamingCursor />}
+                                            {/* Streaming cursor */}
+                                            {message.isStreaming && <StreamingCursor />}
+                                        </div>
+
+                                        {message.model && (
+                                            <div className="text-xs opacity-70 mt-2">
+                                                {message.model}
+                                            </div>
+                                        )}
                                     </div>
-
-                                    {message.model && (
-                                        <div className="text-xs opacity-70 mt-2">
-                                            {message.model}
+                                    {/* Message Actions - positioned below the message */}
+                                    {!message.isStreaming && (
+                                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <MessageActions
+                                                messageId={message.id}
+                                                role={message.role}
+                                                onResend={handleResend}
+                                                onEdit={(messageId) => handleEdit(messageId, message.content, message.role)}
+                                                onRegenerate={handleRegenerate}
+                                                onEditAI={(messageId) => handleEdit(messageId, message.content, message.role)}
+                                                onDelete={handleDelete}
+                                            />
                                         </div>
                                     )}
                                 </div>
@@ -396,6 +470,15 @@ export const ChatRoom = () => {
                     </div>
                 </div>
             </div>
-        </div>
+
+            {/* Edit Message Dialog */}
+            <EditMessageDialog
+                isOpen={editDialog.isOpen}
+                onClose={handleEditCancel}
+                messageContent={editDialog.content}
+                messageRole={editDialog.role}
+                onSave={handleEditSave}
+            />
+        </div >
     );
 };

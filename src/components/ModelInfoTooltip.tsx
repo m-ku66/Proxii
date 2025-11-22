@@ -12,18 +12,6 @@ interface ModelInfoTooltipProps {
 }
 
 export const ModelInfoTooltip: React.FC<ModelInfoTooltipProps> = ({ model, children }) => {
-    // const formatPrice = (priceString: string): string => {
-    //     const pricePerToken = parseFloat(priceString);
-    //     if (pricePerToken === 0) return '0';
-
-    //     // Convert from per-token to per-million tokens
-    //     const pricePerMillion = pricePerToken * 1000000;
-
-    //     if (pricePerMillion < 0.01) return '<$0.01';
-    //     if (pricePerMillion >= 1000) return `$${(pricePerMillion / 1000).toFixed(1)}k`;
-    //     return `$${pricePerMillion.toFixed(2)}`;
-    // };
-
     const formatPrice = (modelId: string, isOutput: boolean): string => {
         // Use 1M tokens as the base for display
         const costFor1M = calculateCost(1_000_000, modelId, isOutput);

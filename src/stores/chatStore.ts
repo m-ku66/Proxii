@@ -119,6 +119,19 @@ interface ChatStore {
   toggleStar: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => void;
   clearError: () => void;
+
+  // Message actions
+  resendMessage: (conversationId: string, messageId: string) => Promise<void>;
+  regenerateMessage: (
+    conversationId: string,
+    messageId: string
+  ) => Promise<void>;
+  editMessage: (
+    conversationId: string,
+    messageId: string,
+    newContent: string
+  ) => Promise<void>;
+  deleteMessage: (conversationId: string, messageId: string) => void;
 }
 
 // Helper function to create a message with calculated tokens/cost
@@ -441,26 +454,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           let totalCost = 0;
 
-          // if (modelData?.pricing) {
-          //   // Parse pricing strings to numbers (e.g. "0" → 0, "0.000003" → 0.000003)
-          //   const promptPrice = parseFloat(modelData.pricing.prompt);
-          //   const completionPrice = parseFloat(modelData.pricing.completion);
-
-          //   // Calculate actual cost
-          //   const inputCost = (usage.prompt_tokens / 1_000_000) * promptPrice;
-          //   const outputCost =
-          //     (usage.completion_tokens / 1_000_000) * completionPrice;
-          //   totalCost = inputCost + outputCost;
-          // } else {
-          //   // Fallback if model not found
-          //   console.warn(
-          //     `Model ${model} not found in availableModels, using fallback pricing`
-          //   );
-          //   const inputCost = (usage.prompt_tokens / 1_000_000) * 3.0;
-          //   const outputCost = (usage.completion_tokens / 1_000_000) * 15.0;
-          //   totalCost = inputCost + outputCost;
-          // }
-
           // Calculate cost using proper pricing utilities
           const inputCost = calculateCost(usage.prompt_tokens, model, false); // false = input tokens
           const outputCost = calculateCost(
@@ -523,4 +516,218 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Resend a user message (resubmit the exact same content)
+  resendMessage: async (conversationId, messageId) => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (conv) => conv.id === conversationId
+    );
+    const message = conversation?.messages.find((msg) => msg.id === messageId);
+
+    if (!message || message.role !== "user") {
+      console.error("Cannot resend: message not found or not a user message");
+      return;
+    }
+
+    if (!conversation) return;
+
+    // Find the model used (look at next assistant message or use current selected model)
+    const messageIndex = conversation.messages.findIndex(
+      (msg) => msg.id === messageId
+    );
+    const nextAssistantMessage = conversation.messages
+      .slice(messageIndex + 1)
+      .find((msg) => msg.role === "assistant");
+
+    const modelToUse =
+      nextAssistantMessage?.model || useModelStore.getState().selectedModelId;
+
+    if (!modelToUse) {
+      console.error("No model available for resend");
+      return;
+    }
+
+    // Remove all messages from the original message onwards (including the original)
+    const messagesToKeep = conversation.messages.slice(0, messageIndex);
+
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, messages: messagesToKeep, updatedAt: new Date() }
+          : conv
+      ),
+    }));
+
+    // Resend the message
+    try {
+      await get().sendMessage(conversationId, message.content, modelToUse);
+    } catch (error) {
+      console.error("Failed to resend message:", error);
+    }
+  },
+
+  // Regenerate an AI response (rerun the conversation up to that point)
+  regenerateMessage: async (conversationId, messageId) => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (conv) => conv.id === conversationId
+    );
+    const messageIndex = conversation?.messages.findIndex(
+      (msg) => msg.id === messageId
+    );
+
+    if (messageIndex === undefined || messageIndex === -1) {
+      console.error("Message not found for regeneration");
+      return;
+    }
+
+    if (!conversation) return;
+
+    const targetMessage = conversation.messages[messageIndex];
+    if (targetMessage.role !== "assistant") {
+      console.error("Cannot regenerate: not an assistant message");
+      return;
+    }
+
+    // Find the user message that prompted this response
+    const userMessage = conversation.messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((msg) => msg.role === "user");
+
+    if (!userMessage) {
+      console.error("Cannot find user message to regenerate from");
+      return;
+    }
+
+    const modelToUse =
+      targetMessage.model || useModelStore.getState().selectedModelId;
+    if (!modelToUse) {
+      console.error("No model available for regeneration");
+      return;
+    }
+
+    // Remove the assistant message and everything after it
+    const messagesToKeep = conversation.messages.slice(0, messageIndex);
+
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, messages: messagesToKeep, updatedAt: new Date() }
+          : conv
+      ),
+    }));
+
+    // Regenerate the response
+    try {
+      await get().sendMessage(conversationId, userMessage.content, modelToUse);
+    } catch (error) {
+      console.error("Failed to regenerate message:", error);
+    }
+  },
+
+  // Edit a message and optionally resend
+  editMessage: async (conversationId, messageId, newContent) => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (conv) => conv.id === conversationId
+    );
+    const messageIndex = conversation?.messages.findIndex(
+      (msg) => msg.id === messageId
+    );
+
+    if (messageIndex === undefined || messageIndex === -1) {
+      console.error("Message not found for editing");
+      return;
+    }
+
+    if (!conversation) return;
+
+    const message = conversation.messages[messageIndex];
+
+    // If it's an AI message, just update the content
+    if (message.role === "assistant") {
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map((msg, idx) =>
+                  idx === messageIndex
+                    ? { ...msg, content: newContent, editedAt: new Date() }
+                    : msg
+                ),
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+      }));
+      return; // Don't resend AI messages
+    }
+
+    // For user messages: update content, remove everything after, then resend
+    if (message.role === "user") {
+      // First update the message content
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map((msg, idx) =>
+                  idx === messageIndex
+                    ? { ...msg, content: newContent, editedAt: new Date() }
+                    : msg
+                ),
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+      }));
+
+      // Remove all messages after the edited message
+      const messagesToKeep = conversation.messages.slice(0, messageIndex + 1);
+
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: messagesToKeep.map((msg, idx) =>
+                  idx === messageIndex
+                    ? { ...msg, content: newContent, editedAt: new Date() }
+                    : msg
+                ),
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+      }));
+
+      // Auto-resend the edited message
+      const modelToUse = useModelStore.getState().selectedModelId;
+      if (modelToUse) {
+        try {
+          await get().sendMessage(conversationId, newContent, modelToUse);
+        } catch (error) {
+          console.error("Failed to resend edited message:", error);
+        }
+      }
+    }
+  },
+
+  // Delete a message
+  deleteMessage: (conversationId, messageId) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: conv.messages.filter((msg) => msg.id !== messageId),
+              updatedAt: new Date(),
+            }
+          : conv
+      ),
+    }));
+  },
 }));

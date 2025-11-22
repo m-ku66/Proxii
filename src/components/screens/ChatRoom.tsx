@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
-import { useUIStore } from '@/stores/uiStore';
 import { InputComponent } from '@/components/InputComponent';
 import { Button } from '@/components/ui/button';
 import {
@@ -134,7 +133,27 @@ export const ChatRoom = () => {
     ) => {
         if (!activeConversationId) return;
 
+        // 🐛 DEBUG: Check what ChatRoom receives and what it passes
+        // console.log('📨 ChatRoom handleSubmit RECEIVED:', {
+        //     message: message.substring(0, 20) + '...',
+        //     model,
+        //     thinkingEnabled,
+        //     thinkingEnabledType: typeof thinkingEnabled,
+        //     options,
+        //     optionsType: typeof options
+        // });
+
         try {
+            // console.log('📤 ChatRoom calling sendMessage with:', {
+            //     conversationId: activeConversationId,
+            //     message: message.substring(0, 20) + '...',
+            //     model,
+            //     thinkingEnabled,
+            //     thinkingEnabledType: typeof thinkingEnabled,
+            //     options,
+            //     optionsType: typeof options
+            // });
+
             await sendMessage(activeConversationId, message, model, thinkingEnabled, options);
         } catch (error) {
             console.error('Failed to send message:', error);

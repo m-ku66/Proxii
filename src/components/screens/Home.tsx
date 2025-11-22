@@ -27,7 +27,7 @@ export const Home = () => {
         if (newChatId) {
             try {
                 // Send the message
-                await sendMessage(newChatId, message, model, options);
+                await sendMessage(newChatId, message, model, thinkingEnabled, options);
 
                 // Navigate to chat room
                 setActiveScreen('chatRoom');

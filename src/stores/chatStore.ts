@@ -3,6 +3,7 @@ import { calculateMessageMetrics } from "@/utils/tokenUtils";
 import { sendChatCompletionStream } from "@/services/apiService";
 import { useModelStore } from "@/stores/modelStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { calculateCost } from "@/utils/tokenUtils";
 
 // Thinking capability types
 type ThinkingCapability =
@@ -367,6 +368,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Check if model supports thinking and apply appropriate parameters
       const thinkingCapability = supportsThinking(model);
 
+      // 🐛 DEBUG: Log thinking state
+      // console.log("🧠 Thinking Debug:", {
+      //   model,
+      //   thinkingCapability,
+      //   thinkingEnabled,
+      //   willAddReasoning: thinkingEnabled && thinkingCapability,
+      // });
+
       if (thinkingEnabled && thinkingCapability) {
         switch (thinkingCapability) {
           case "reasoning_effort":
@@ -392,9 +401,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           case "always":
             // DeepSeek - always thinks, no parameters needed
+            // ⚠️ NOTE: These models think by default and cannot be toggled off!
+            // The toggle only controls whether reasoning parameters are sent,
+            // but DeepSeek will generate thinking tokens regardless
             break;
         }
       }
+
+      // 🐛 DEBUG: Log final request parameters
+      // console.log("📡 Final Request Params:", {
+      //   model: requestParams.model,
+      //   hasReasoning: !!requestParams.reasoning,
+      //   reasoning: requestParams.reasoning,
+      //   messageCount: requestParams.messages.length,
+      // });
 
       // Stream the response
       await sendChatCompletionStream(requestParams, {
@@ -421,25 +441,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           let totalCost = 0;
 
-          if (modelData?.pricing) {
-            // Parse pricing strings to numbers (e.g. "0" → 0, "0.000003" → 0.000003)
-            const promptPrice = parseFloat(modelData.pricing.prompt);
-            const completionPrice = parseFloat(modelData.pricing.completion);
+          // if (modelData?.pricing) {
+          //   // Parse pricing strings to numbers (e.g. "0" → 0, "0.000003" → 0.000003)
+          //   const promptPrice = parseFloat(modelData.pricing.prompt);
+          //   const completionPrice = parseFloat(modelData.pricing.completion);
 
-            // Calculate actual cost
-            const inputCost = (usage.prompt_tokens / 1_000_000) * promptPrice;
-            const outputCost =
-              (usage.completion_tokens / 1_000_000) * completionPrice;
-            totalCost = inputCost + outputCost;
-          } else {
-            // Fallback if model not found
-            console.warn(
-              `Model ${model} not found in availableModels, using fallback pricing`
-            );
-            const inputCost = (usage.prompt_tokens / 1_000_000) * 3.0;
-            const outputCost = (usage.completion_tokens / 1_000_000) * 15.0;
-            totalCost = inputCost + outputCost;
-          }
+          //   // Calculate actual cost
+          //   const inputCost = (usage.prompt_tokens / 1_000_000) * promptPrice;
+          //   const outputCost =
+          //     (usage.completion_tokens / 1_000_000) * completionPrice;
+          //   totalCost = inputCost + outputCost;
+          // } else {
+          //   // Fallback if model not found
+          //   console.warn(
+          //     `Model ${model} not found in availableModels, using fallback pricing`
+          //   );
+          //   const inputCost = (usage.prompt_tokens / 1_000_000) * 3.0;
+          //   const outputCost = (usage.completion_tokens / 1_000_000) * 15.0;
+          //   totalCost = inputCost + outputCost;
+          // }
+
+          // Calculate cost using proper pricing utilities
+          const inputCost = calculateCost(usage.prompt_tokens, model, false); // false = input tokens
+          const outputCost = calculateCost(
+            usage.completion_tokens,
+            model,
+            true
+          ); // true = output tokens
+          totalCost = inputCost + outputCost;
 
           // Finalize the message with real token counts and cost
           get().finalizeMessage(

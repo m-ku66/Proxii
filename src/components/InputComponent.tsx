@@ -30,7 +30,17 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const [message, setMessage] = useState('');
     const [temperature, setTemperature] = useState(0.7);
     const [maxTokens, setMaxTokens] = useState(4000);
-    const [thinkingEnabled, setThinkingEnabled] = useState(false);
+    const [thinkingEnabled, setThinkingEnabledRaw] = useState(false);
+
+    // 🐛 DEBUG: Wrap setThinkingEnabled to catch corruption
+    const setThinkingEnabled = (value: boolean) => {
+        // console.log('🧠 Setting thinkingEnabled:', {
+        //     newValue: value,
+        //     type: typeof value,
+        //     stringified: JSON.stringify(value)
+        // });
+        setThinkingEnabledRaw(value);
+    };
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -79,6 +89,15 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     }, [message]);
 
     const handleSubmit = () => {
+        // 🐛 DEBUG: Check thinkingEnabled value before sending
+        // console.log('🎯 InputComponent handleSubmit:', {
+        //     thinkingEnabled,
+        //     type: typeof thinkingEnabled,
+        //     stringified: JSON.stringify(thinkingEnabled),
+        //     temperature,
+        //     maxTokens
+        // });
+
         if (message.trim() && selectedModelId) {
             onSubmit?.(message, selectedModelId, thinkingEnabled, {
                 temperature,

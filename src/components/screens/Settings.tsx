@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search } from 'lucide-react';
+import ModelInfoTooltip from '../ModelInfoTooltip';
 
 export const Settings = () => {
     const {
@@ -163,6 +164,9 @@ export const Settings = () => {
                                         openrouter.ai/keys
                                     </a>
                                 </p>
+                                <p className="text-xs text-muted-foreground">
+                                    If Openrouter is your LLM provider, you can get accurate usage costs via the link above
+                                </p>
                             </div>
 
                             <Button
@@ -260,7 +264,7 @@ export const Settings = () => {
                         <CardHeader>
                             <CardTitle>Model Collection</CardTitle>
                             <CardDescription>
-                                Manage which models appear in your chat dropdown
+                                Manage which models appear in your chat dropdown. Click on models in the search list to see extra information about them.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -289,13 +293,15 @@ export const Settings = () => {
                                         </Label>
                                         <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
                                             {getUserModels().map((model) => (
-                                                <div
-                                                    key={model.id}
+                                                <ModelInfoTooltip key={model.id} model={model}>  <div
                                                     className="flex items-center justify-between p-2 bg-muted rounded"
                                                 >
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-sm font-medium truncate">{model.name}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{model.id}</p>
+                                                        <p className="text-xs text-muted-foreground truncate">
+                                                            {model.id}
+                                                        </p>
+
                                                     </div>
                                                     <Button
                                                         variant="ghost"
@@ -305,7 +311,7 @@ export const Settings = () => {
                                                     >
                                                         <X className="h-4 w-4" />
                                                     </Button>
-                                                </div>
+                                                </div></ModelInfoTooltip>
                                             ))}
                                             {getUserModels().length === 0 && (
                                                 <p className="text-sm text-muted-foreground text-center py-4">
@@ -335,34 +341,34 @@ export const Settings = () => {
                                         {/* Model List */}
                                         <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
                                             {filteredModels.map((model) => (
-                                                <div
-                                                    key={model.id}
-                                                    className="flex items-center justify-between p-2 hover:bg-muted rounded"
-                                                >
-                                                    <div className="flex-1 min-w-0 mr-2">
-                                                        <p className="text-sm font-medium truncate">{model.name}</p>
-                                                        <p className="text-xs text-muted-foreground truncate">{model.id}</p>
+                                                <ModelInfoTooltip key={model.id} model={model}>
+                                                    <div className="flex items-center justify-between p-2 bg-muted rounded hover:bg-muted/80 transition-colors">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-medium truncate">{model.name}</p>
+                                                            <p className="text-xs text-muted-foreground truncate">{model.id}</p>
+                                                        </div>
+                                                        {isInCollection(model.id) ? (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                disabled
+                                                                className="h-8"
+                                                            >
+                                                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => addToCollection(model.id)}
+                                                                className="h-8"
+                                                            >
+                                                                <Plus className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
                                                     </div>
-                                                    {isInCollection(model.id) ? (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            disabled
-                                                            className="h-8"
-                                                        >
-                                                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                                        </Button>
-                                                    ) : (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => addToCollection(model.id)}
-                                                            className="h-8"
-                                                        >
-                                                            <Plus className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </div>
+                                                </ModelInfoTooltip>
+
                                             ))}
                                             {filteredModels.length === 0 && (
                                                 <p className="text-sm text-muted-foreground text-center py-4">
@@ -436,6 +442,6 @@ export const Settings = () => {
                     </Card>
                 </TabsContent>
             </Tabs>
-        </div>
+        </div >
     );
 };

@@ -4,6 +4,8 @@ import { sendChatCompletionStream } from "@/services/apiService";
 import { useModelStore } from "@/stores/modelStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { calculateCost } from "@/utils/tokenUtils";
+import { conversationPersistence } from "../services/conversationPersistenceService";
+import type { LocalConversation } from "../types/electron";
 
 // Thinking capability types
 type ThinkingCapability =
@@ -117,7 +119,7 @@ interface ChatStore {
     }
   ) => Promise<void>;
   toggleStar: (conversationId: string) => void;
-  deleteConversation: (conversationId: string) => void;
+  deleteConversation: (conversationId: string) => Promise<void>;
   clearError: () => void;
 
   // Message actions
@@ -132,6 +134,16 @@ interface ChatStore {
     newContent: string
   ) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => void;
+
+  // ✨ NEW: Persistence methods
+  setConversationsFromDisk: (conversations: Conversation[]) => void;
+  exportConversation: (
+    conversation: Conversation,
+    format: "json" | "markdown" | "txt"
+  ) => Promise<string | null>;
+  openConversationsFolder: () => Promise<void>;
+  getConversationsPath: () => Promise<string | null>;
+  saveAllDirtyConversations: () => Promise<void>;
 }
 
 // Helper function to create a message with calculated tokens/cost
@@ -206,6 +218,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       conversations: [newConversation, ...state.conversations],
       activeConversationId: newConversation.id,
     }));
+
+    // ✨ ENHANCED: Only save new conversation if it has messages
+    // Empty conversations will be saved when the first message is added
+    if (firstMessage) {
+      conversationPersistence
+        .saveConversation(newConversation as LocalConversation)
+        .catch((error) => {
+          console.error("Failed to save new conversation:", error);
+        });
+    }
   },
 
   addMessage: (conversationId, content, role, model, tokens, cost) => {
@@ -222,6 +244,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark conversation as dirty for auto-save
+    conversationPersistence.markDirty(conversationId);
   },
 
   // Update a streaming message's content (append chunks)
@@ -241,6 +266,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark conversation as dirty (streaming updates)
+    conversationPersistence.markDirty(conversationId);
   },
 
   // Update a streaming message's thinking tokens
@@ -264,6 +292,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark conversation as dirty (thinking updates)
+    conversationPersistence.markDirty(conversationId);
   },
 
   // Finalize a streaming message with token counts and cost
@@ -283,6 +314,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Save immediately when message is finalized (high priority)
+    const conversation = get().conversations.find(
+      (c) => c.id === conversationId
+    );
+    if (conversation) {
+      conversationPersistence
+        .saveConversation(conversation as LocalConversation)
+        .catch((error) => {
+          console.error("Failed to auto-save finalized conversation:", error);
+        });
+    }
   },
 
   /**
@@ -381,14 +424,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Check if model supports thinking and apply appropriate parameters
       const thinkingCapability = supportsThinking(model);
 
-      // 🐛 DEBUG: Log thinking state
-      // console.log("🧠 Thinking Debug:", {
-      //   model,
-      //   thinkingCapability,
-      //   thinkingEnabled,
-      //   willAddReasoning: thinkingEnabled && thinkingCapability,
-      // });
-
       if (thinkingEnabled && thinkingCapability) {
         switch (thinkingCapability) {
           case "reasoning_effort":
@@ -414,20 +449,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           case "always":
             // DeepSeek - always thinks, no parameters needed
-            // ⚠️ NOTE: These models think by default and cannot be toggled off!
-            // The toggle only controls whether reasoning parameters are sent,
-            // but DeepSeek will generate thinking tokens regardless
             break;
         }
       }
-
-      // 🐛 DEBUG: Log final request parameters
-      // console.log("📡 Final Request Params:", {
-      //   model: requestParams.model,
-      //   hasReasoning: !!requestParams.reasoning,
-      //   reasoning: requestParams.reasoning,
-      //   messageCount: requestParams.messages.length,
-      // });
 
       // Stream the response
       await sendChatCompletionStream(requestParams, {
@@ -501,18 +525,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         conv.id === conversationId ? { ...conv, starred: !conv.starred } : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark conversation as dirty when starred/unstarred
+    conversationPersistence.markDirty(conversationId);
   },
 
-  deleteConversation: (conversationId) => {
-    set((state) => ({
-      conversations: state.conversations.filter(
-        (conv) => conv.id !== conversationId
-      ),
-      activeConversationId:
-        state.activeConversationId === conversationId
-          ? null
-          : state.activeConversationId,
-    }));
+  deleteConversation: async (conversationId) => {
+    try {
+      // ✨ ENHANCED: Remove from disk first
+      await conversationPersistence.deleteConversation(conversationId);
+
+      // Then remove from state
+      set((state) => ({
+        conversations: state.conversations.filter(
+          (conv) => conv.id !== conversationId
+        ),
+        activeConversationId:
+          state.activeConversationId === conversationId
+            ? null
+            : state.activeConversationId,
+      }));
+    } catch (error) {
+      console.error("Failed to delete conversation from disk:", error);
+
+      // Still remove from state even if disk deletion fails
+      set((state) => ({
+        conversations: state.conversations.filter(
+          (conv) => conv.id !== conversationId
+        ),
+        activeConversationId:
+          state.activeConversationId === conversationId
+            ? null
+            : state.activeConversationId,
+      }));
+
+      // Re-throw so UI can handle the error
+      throw error;
+    }
   },
 
   clearError: () => set({ error: null }),
@@ -558,6 +607,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark as dirty after truncating conversation
+    conversationPersistence.markDirty(conversationId);
 
     // Now directly call sendMessage with the original content
     try {
@@ -607,6 +659,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark as dirty after truncating
+    conversationPersistence.markDirty(conversationId);
 
     // Set loading state
     set({ isLoading: true, error: null });
@@ -792,6 +847,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             : conv
         ),
       }));
+
+      // ✨ ENHANCED: Mark as dirty after editing assistant message
+      conversationPersistence.markDirty(conversationId);
       return; // Don't resend AI messages
     }
 
@@ -818,6 +876,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             : conv
         ),
       }));
+
+      // ✨ ENHANCED: Mark as dirty after editing user message
+      conversationPersistence.markDirty(conversationId);
 
       // Set loading state
       set({ isLoading: true, error: null });
@@ -964,5 +1025,54 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           : conv
       ),
     }));
+
+    // ✨ ENHANCED: Mark as dirty after deleting message
+    conversationPersistence.markDirty(conversationId);
+  },
+
+  // ✨ NEW: Persistence methods
+  setConversationsFromDisk: (conversations) => {
+    set({ conversations });
+  },
+
+  exportConversation: async (conversation, format) => {
+    try {
+      return await conversationPersistence.exportConversation(
+        conversation as LocalConversation,
+        format
+      );
+    } catch (error) {
+      console.error("Failed to export conversation:", error);
+      throw error;
+    }
+  },
+
+  openConversationsFolder: async () => {
+    try {
+      await conversationPersistence.openConversationsFolder();
+    } catch (error) {
+      console.error("Failed to open conversations folder:", error);
+      throw error;
+    }
+  },
+
+  getConversationsPath: async () => {
+    try {
+      return await conversationPersistence.getConversationsPath();
+    } catch (error) {
+      console.error("Failed to get conversations path:", error);
+      return null;
+    }
+  },
+
+  saveAllDirtyConversations: async () => {
+    try {
+      const { conversations } = get();
+      await conversationPersistence.saveAllDirty(
+        conversations as LocalConversation[]
+      );
+    } catch (error) {
+      console.error("Failed to save dirty conversations:", error);
+    }
   },
 }));

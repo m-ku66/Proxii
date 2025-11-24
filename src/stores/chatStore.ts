@@ -219,7 +219,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       activeConversationId: newConversation.id,
     }));
 
-    // ✨ ENHANCED: Only save new conversation if it has messages
+    //  Only save new conversation if it has messages
     // Empty conversations will be saved when the first message is added
     if (firstMessage) {
       conversationPersistence
@@ -245,8 +245,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark conversation as dirty for auto-save
+    //  Mark conversation as dirty for auto-save
     conversationPersistence.markDirty(conversationId);
+
+    // Save immediately when user sends a message
+    if (role === "user") {
+      const conversation = get().conversations.find(
+        (c) => c.id === conversationId
+      );
+      if (conversation) {
+        conversationPersistence
+          .saveConversationImmediately(conversation as LocalConversation)
+          .catch((error) =>
+            console.error("Failed to save user message:", error)
+          );
+      }
+    }
   },
 
   // Update a streaming message's content (append chunks)
@@ -267,7 +281,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark conversation as dirty (streaming updates)
+    // Mark conversation as dirty (streaming updates)
     conversationPersistence.markDirty(conversationId);
   },
 
@@ -293,7 +307,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark conversation as dirty (thinking updates)
+    //  Mark conversation as dirty (thinking updates)
     conversationPersistence.markDirty(conversationId);
   },
 
@@ -315,16 +329,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Save immediately when message is finalized (high priority)
+    // Save immediately when AI response is completed
     const conversation = get().conversations.find(
       (c) => c.id === conversationId
     );
     if (conversation) {
       conversationPersistence
-        .saveConversation(conversation as LocalConversation)
-        .catch((error) => {
-          console.error("Failed to auto-save finalized conversation:", error);
-        });
+        .saveConversationImmediately(conversation as LocalConversation)
+        .catch((error) => console.error("Failed to save AI response:", error));
     }
   },
 
@@ -472,9 +484,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // Handle completion with usage stats
         onComplete: (usage) => {
           // Calculate cost using ACTUAL pricing from OpenRouter
-          const modelData = useModelStore
-            .getState()
-            .availableModels.find((m) => m.id === model);
+          // const modelData = useModelStore
+          //   .getState()
+          //   .availableModels.find((m) => m.id === model);
 
           let totalCost = 0;
 
@@ -526,13 +538,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark conversation as dirty when starred/unstarred
+    //  Mark conversation as dirty when starred/unstarred
     conversationPersistence.markDirty(conversationId);
   },
 
   deleteConversation: async (conversationId) => {
     try {
-      // ✨ ENHANCED: Remove from disk first
+      //  Remove from disk first
       await conversationPersistence.deleteConversation(conversationId);
 
       // Then remove from state
@@ -608,7 +620,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark as dirty after truncating conversation
+    //  Mark as dirty after truncating conversation
     conversationPersistence.markDirty(conversationId);
 
     // Now directly call sendMessage with the original content
@@ -660,7 +672,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark as dirty after truncating
+    //  Mark as dirty after truncating
     conversationPersistence.markDirty(conversationId);
 
     // Set loading state
@@ -848,7 +860,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ),
       }));
 
-      // ✨ ENHANCED: Mark as dirty after editing assistant message
+      //  Mark as dirty after editing assistant message
       conversationPersistence.markDirty(conversationId);
       return; // Don't resend AI messages
     }
@@ -877,7 +889,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ),
       }));
 
-      // ✨ ENHANCED: Mark as dirty after editing user message
+      //  Mark as dirty after editing user message
       conversationPersistence.markDirty(conversationId);
 
       // Set loading state
@@ -1026,7 +1038,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    // ✨ ENHANCED: Mark as dirty after deleting message
+    //  Mark as dirty after deleting message
     conversationPersistence.markDirty(conversationId);
   },
 

@@ -465,8 +465,7 @@ export const ChatRoom = () => {
                     </div>
 
                     <div className="text-xs text-muted-foreground">
-                        <p className="mb-1">💾 Auto-save: Enabled</p>
-                        <p>Last saved: Just now</p>
+                        <p className="mb-1">💾 Conversations are saved on every message</p>
                     </div>
                 </div>
             </div>

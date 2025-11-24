@@ -6,18 +6,15 @@ import type { LocalConversation } from "../types/electron";
  */
 export class ConversationPersistenceService {
   private isDirty = new Set<string>(); // Track conversations that need saving
-  private autoSaveInterval: NodeJS.Timeout | null = null;
 
   /**
    * Initialize the persistence service
    */
   async initialize(): Promise<void> {
-    // Start auto-save interval (every 30 seconds)
-    this.startAutoSave();
-
     // Set up cleanup on page unload
     window.addEventListener("beforeunload", () => {
-      this.stopAutoSave();
+      // Save any pending dirty conversations before closing
+      console.log("💾 App closing, ensuring all conversations are saved");
     });
   }
 
@@ -183,28 +180,26 @@ export class ConversationPersistenceService {
   }
 
   /**
-   * Start auto-save interval
+   * Save a conversation immediately (event-based)
    */
-  private startAutoSave(): void {
-    if (this.autoSaveInterval) return;
+  async saveConversationImmediately(
+    conversation: LocalConversation
+  ): Promise<void> {
+    try {
+      if (!window.electronAPI) {
+        console.warn(
+          "Electron API not available, saving to localStorage as fallback"
+        );
+        this.saveToLocalStorage(conversation);
+        return;
+      }
 
-    this.autoSaveInterval = setInterval(() => {
-      // This will be triggered by the chat store
-      const event = new CustomEvent("proxii-autosave");
-      window.dispatchEvent(event);
-    }, 30000); // 30 seconds
-
-    console.log("Auto-save started (30 second interval)");
-  }
-
-  /**
-   * Stop auto-save interval
-   */
-  private stopAutoSave(): void {
-    if (this.autoSaveInterval) {
-      clearInterval(this.autoSaveInterval);
-      this.autoSaveInterval = null;
-      console.log("Auto-save stopped");
+      await window.electronAPI.conversations.save(conversation);
+      this.isDirty.delete(conversation.id);
+      console.log(`💾 Saved conversation immediately: ${conversation.title}`);
+    } catch (error) {
+      console.error("Failed to save conversation immediately:", error);
+      throw error;
     }
   }
 
@@ -236,7 +231,6 @@ export class ConversationPersistenceService {
    * Clean up resources
    */
   destroy(): void {
-    this.stopAutoSave();
     this.isDirty.clear();
   }
 }

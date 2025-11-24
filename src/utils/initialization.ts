@@ -128,7 +128,7 @@ function setupAutoSave(): void {
     // Save all dirty conversations before page unload
     window.addEventListener("beforeunload", async (event) => {
       try {
-        console.log("💾 Saving conversations before app close...");
+        console.log(event, ": 💾 Saving conversations before app close...");
 
         // Get all conversations and save dirty ones
         // Note: This is best effort - browser may not wait for async operations

@@ -75,10 +75,20 @@ ipcMain.handle(
     format: "json" | "markdown" | "txt"
   ) => {
     try {
+      // SANITIZE THE FILENAME
+      const sanitizedTitle = conversation.title
+        .replace(/\s+/g, "_") // Replace spaces with underscores
+        .replace(/[^\w\-_]/g, "") // Remove special chars (keep letters, numbers, hyphens, underscores)
+        .replace(/_{2,}/g, "_") // Replace multiple underscores with single
+        .replace(/^_+|_+$/g, ""); // Remove leading/trailing underscores
+
+      // Fallback if title becomes empty after sanitization
+      const filename = sanitizedTitle || `conversation_${conversation.id}`;
+
       // Open save dialog
       const result = await dialog.showSaveDialog({
         title: "Export Conversation",
-        defaultPath: `${conversation.title}.${format}`,
+        defaultPath: `${filename}.${format === "markdown" ? "md" : format}`, // ✨ USE SANITIZED NAME
         filters: [
           {
             name: `${format.toUpperCase()} Files`,

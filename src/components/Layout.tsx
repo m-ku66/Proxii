@@ -5,6 +5,7 @@ import { Chats } from './screens/Chats';
 import { ChatRoom } from './screens/ChatRoom';
 import { Projects } from './screens/Projects';
 import { Settings } from './screens/Settings';
+import { Toaster } from './ui/sonner';
 
 export const Layout = () => {
     const { activeScreen } = useUIStore();
@@ -32,6 +33,7 @@ export const Layout = () => {
             <main className="flex-1 overflow-auto">
                 {renderScreen()}
             </main>
+            <Toaster position='top-right' offset={{ top: 10, right: 10 }} />
         </div>
     );
 };

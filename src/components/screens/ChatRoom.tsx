@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { MessageActions } from '@/components/MessageActions';
 import { EditMessageDialog } from '@/components/EditMessageDialog';
+import { toast } from 'sonner';
 
 
 // Thinking bubble component
@@ -109,7 +110,8 @@ export const ChatRoom = () => {
         resendMessage,
         regenerateMessage,
         editMessage,
-        deleteMessage
+        deleteMessage,
+        exportConversation,
     } = useChatStore();
 
     const activeConversation = conversations.find(
@@ -179,10 +181,31 @@ export const ChatRoom = () => {
         }
     };
 
-    const handleExport = (format: 'txt' | 'md' | 'json') => {
-        if (!activeConversation) return;
-        // TODO: Implement export functionality
-        console.log(`Exporting as ${format}`);
+    const handleExport = async (format: 'txt' | 'markdown' | 'json') => {
+        if (!activeConversation) {
+            toast.error('No conversation to export');
+            return;
+        }
+
+        try {
+            // Show loading toast
+            toast.loading(`Exporting as ${format.toUpperCase()}...`);
+
+            const filePath = await exportConversation(activeConversation, format);
+
+            // Dismiss loading toast
+            toast.dismiss();
+
+            if (filePath) {
+                toast.success(`Exported successfully to ${filePath}`);
+            } else {
+                toast.info('Export cancelled');
+            }
+        } catch (error) {
+            toast.dismiss();
+            toast.error('Export failed. Please try again.');
+            console.error('Export failed:', error);
+        }
     };
 
     // If no active conversation, show empty state
@@ -448,7 +471,7 @@ export const ChatRoom = () => {
                             <Button
                                 variant="outline"
                                 className="w-full justify-start gap-2"
-                                onClick={() => handleExport('md')}
+                                onClick={() => handleExport('markdown')}
                             >
                                 <Download className="h-4 w-4" />
                                 Export as Markdown
@@ -465,7 +488,8 @@ export const ChatRoom = () => {
                     </div>
 
                     <div className="text-xs text-muted-foreground">
-                        <p className="mb-1">💾 Conversations are saved on every message</p>
+                        <p className="mb-1">💾 Local saving</p>
+                        <p>Conversations are saved locally on every message.</p>
                     </div>
                 </div>
             </div>

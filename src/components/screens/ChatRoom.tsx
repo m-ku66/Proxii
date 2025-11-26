@@ -99,6 +99,14 @@ export const ChatRoom = () => {
         role: 'user'
     });
 
+    const [renameDialog, setRenameDialog] = useState<{
+        isOpen: boolean;
+        currentTitle: string;
+    }>({
+        isOpen: false,
+        currentTitle: '',
+    });
+
     const {
         conversations,
         activeConversationId,
@@ -112,6 +120,7 @@ export const ChatRoom = () => {
         editMessage,
         deleteMessage,
         exportConversation,
+        renameConversation
     } = useChatStore();
 
     const activeConversation = conversations.find(
@@ -154,27 +163,15 @@ export const ChatRoom = () => {
     ) => {
         if (!activeConversationId) return;
 
-        // 🐛 DEBUG: Check what ChatRoom receives and what it passes
-        // console.log('📨 ChatRoom handleSubmit RECEIVED:', {
-        //     message: message.substring(0, 20) + '...',
-        //     model,
-        //     thinkingEnabled,
-        //     thinkingEnabledType: typeof thinkingEnabled,
-        //     options,
-        //     optionsType: typeof options
-        // });
+        // 🐛 DEBUG: Log what ChatRoom receives and passes to store
+        console.log('📨 ChatRoom received:', {
+            temperature: options?.temperature,
+            maxTokens: options?.max_tokens,
+            thinkingEnabled,
+            model
+        });
 
         try {
-            // console.log('📤 ChatRoom calling sendMessage with:', {
-            //     conversationId: activeConversationId,
-            //     message: message.substring(0, 20) + '...',
-            //     model,
-            //     thinkingEnabled,
-            //     thinkingEnabledType: typeof thinkingEnabled,
-            //     options,
-            //     optionsType: typeof options
-            // });
-
             await sendMessage(activeConversationId, message, model, thinkingEnabled, options);
         } catch (error) {
             console.error('Failed to send message:', error);
@@ -288,8 +285,13 @@ export const ChatRoom = () => {
                             />
                             {activeConversation.starred ? 'Unstar' : 'Star'} Chat
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2">
-                            <Edit className="h-4 w-4" />
+                        <DropdownMenuItem
+                            onClick={() => setRenameDialog({
+                                isOpen: true,
+                                currentTitle: activeConversation.title
+                            })}
+                        >
+                            <Edit className="h-4 w-4 mr-2" />
                             Rename Chat
                         </DropdownMenuItem>
                     </DropdownMenuContent>
@@ -493,6 +495,45 @@ export const ChatRoom = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Rename Dialog */}
+            {renameDialog.isOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg p-6 w-96">
+                        <h3 className="font-semibold mb-4">Rename Chat</h3>
+                        <input
+                            type="text"
+                            value={renameDialog.currentTitle}
+                            onChange={(e) => setRenameDialog(prev => ({
+                                ...prev,
+                                currentTitle: e.target.value
+                            }))}
+                            className="w-full p-2 border rounded mb-4"
+                            placeholder="Chat title..."
+                            autoFocus
+                        />
+                        <div className="flex gap-2 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => setRenameDialog({ isOpen: false, currentTitle: '' })}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (activeConversationId && renameDialog.currentTitle.trim()) {
+                                        renameConversation(activeConversationId, renameDialog.currentTitle);
+                                        setRenameDialog({ isOpen: false, currentTitle: '' });
+                                        toast.success('Chat renamed!');
+                                    }
+                                }}
+                            >
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Edit Message Dialog */}
             <EditMessageDialog

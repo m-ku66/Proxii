@@ -120,6 +120,7 @@ interface ChatStore {
   ) => Promise<void>;
   toggleStar: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
+  renameConversation: (conversationId: string, newTitle: string) => void;
   clearError: () => void;
 
   // Message actions
@@ -135,7 +136,7 @@ interface ChatStore {
   ) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => void;
 
-  // ✨ NEW: Persistence methods
+  // Persistence methods
   setConversationsFromDisk: (conversations: Conversation[]) => void;
   exportConversation: (
     conversation: Conversation,
@@ -350,7 +351,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     thinkingEnabled = false,
     options = {}
   ) => {
-    const { temperature = 0.7, max_tokens = 4000 } = options;
+    // const { temperature = 0.7, max_tokens = 4000 } = options;
 
     // Set loading state
     set({ isLoading: true, error: null });
@@ -429,10 +430,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const requestParams: any = {
         model,
         messages: apiMessages,
-        temperature,
-        max_tokens,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.max_tokens ?? 4000,
       };
 
+      // 🐛 DEBUG: Log final API parameters
+      console.log("🚀 chatStore sending to API:", {
+        model: requestParams.model,
+        temperature: requestParams.temperature,
+        max_tokens: requestParams.max_tokens,
+        messageCount: apiMessages.length,
+        thinkingEnabled,
+      });
       // Check if model supports thinking and apply appropriate parameters
       const thinkingCapability = supportsThinking(model);
 
@@ -574,6 +583,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Re-throw so UI can handle the error
       throw error;
     }
+  },
+
+  // Rename a conversation
+  renameConversation: (conversationId, newTitle) => {
+    set((state) => ({
+      conversations: state.conversations.map((conv) =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              title: newTitle.trim(),
+              updatedAt: new Date(),
+            }
+          : conv
+      ),
+    }));
+
+    // Mark as dirty for persistence
+    conversationPersistence.markDirty(conversationId);
   },
 
   clearError: () => set({ error: null }),

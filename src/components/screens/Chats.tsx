@@ -20,15 +20,33 @@ import {
     PaginationPrevious,
 } from '@/components/ui/pagination';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus } from 'lucide-react';
+import { Plus, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
 
 export const Chats = () => {
-    const { conversations, setActiveConversation } = useChatStore();
+    const { conversations, setActiveConversation, renameConversation, deleteConversation } = useChatStore();
     const { setActiveScreen } = useUIStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'all' | 'starred'>('all');
     const [currentPage, setCurrentPage] = useState(1);
     const chatsPerPage = 10;
+
+    // Rename dialog state
+    const [renameDialog, setRenameDialog] = useState<{
+        isOpen: boolean;
+        conversationId: string;
+        currentTitle: string;
+    }>({
+        isOpen: false,
+        conversationId: '',
+        currentTitle: '',
+    });
 
     // Filter conversations based on tab and search
     const filteredConversations = conversations.filter((conv) => {
@@ -134,18 +152,59 @@ export const Chats = () => {
                             onClick={() => handleChatClick(conv.id)}
                         >
                             <ItemContent className="w-full">
-                                <div className="flex items-start justify-between gap-4 w-full">
+                                <div className="flex items-center justify-between gap-4 w-full">
                                     <div className="flex-1 min-w-0">
                                         <ItemTitle className="line-clamp-1 mb-1">
                                             {conv.title}
                                         </ItemTitle>
-                                        <ItemDescription className="text-xs">
-                                            Created {formatDate(conv.createdAt)}
-                                        </ItemDescription>
+                                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                            <span>Created {formatDate(conv.createdAt)}</span>
+                                            <span>•</span>
+                                            <span>Last message {formatTime(conv.updatedAt)}</span>
+                                        </div>
                                     </div>
-                                    <ItemDescription className="shrink-0 text-xs text-right">
-                                        {formatTime(conv.updatedAt)}
-                                    </ItemDescription>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger
+                                            asChild
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 hover:bg-accent-foreground/10"
+                                            >
+                                                <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setRenameDialog({
+                                                        isOpen: true,
+                                                        conversationId: conv.id,
+                                                        currentTitle: conv.title
+                                                    });
+                                                }}
+                                            >
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Rename
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (confirm('Are you sure you want to delete this chat?')) {
+                                                        deleteConversation(conv.id);
+                                                        toast.success('Chat deleted');
+                                                    }
+                                                }}
+                                                className="text-destructive"
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 </div>
                             </ItemContent>
                         </Item>
@@ -207,6 +266,53 @@ export const Chats = () => {
                         </PaginationItem>
                     </PaginationContent>
                 </Pagination>
+            )}
+
+            {/* Rename Dialog */}
+            {renameDialog.isOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg p-6 w-96">
+                        <h3 className="font-semibold mb-4">Rename Chat</h3>
+                        <Input
+                            type="text"
+                            value={renameDialog.currentTitle}
+                            onChange={(e) => setRenameDialog(prev => ({
+                                ...prev,
+                                currentTitle: e.target.value
+                            }))}
+                            placeholder="Chat title..."
+                            autoFocus
+                            className="mb-4"
+                        />
+                        <div className="flex gap-2 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => setRenameDialog({
+                                    isOpen: false,
+                                    conversationId: '',
+                                    currentTitle: ''
+                                })}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (renameDialog.currentTitle.trim()) {
+                                        renameConversation(renameDialog.conversationId, renameDialog.currentTitle);
+                                        setRenameDialog({
+                                            isOpen: false,
+                                            conversationId: '',
+                                            currentTitle: ''
+                                        });
+                                        toast.success('Chat renamed!');
+                                    }
+                                }}
+                            >
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -32,13 +32,8 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabledRaw] = useState(false);
 
-    // 🐛 DEBUG: Wrap setThinkingEnabled to catch corruption
     const setThinkingEnabled = (value: boolean) => {
-        // console.log('🧠 Setting thinkingEnabled:', {
-        //     newValue: value,
-        //     type: typeof value,
-        //     stringified: JSON.stringify(value)
-        // });
+        // console.log('Setting thinking enabled to:', value);
         setThinkingEnabledRaw(value);
     };
 
@@ -89,14 +84,13 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     }, [message]);
 
     const handleSubmit = () => {
-        // 🐛 DEBUG: Check thinkingEnabled value before sending
-        // console.log('🎯 InputComponent handleSubmit:', {
-        //     thinkingEnabled,
-        //     type: typeof thinkingEnabled,
-        //     stringified: JSON.stringify(thinkingEnabled),
-        //     temperature,
-        //     maxTokens
-        // });
+        // 🐛 DEBUG: Log what InputComponent is sending
+        console.log('📤 InputComponent sending:', {
+            temperature,
+            maxTokens,
+            thinkingEnabled,
+            selectedModel: selectedModelId
+        });
 
         if (message.trim() && selectedModelId) {
             onSubmit?.(message, selectedModelId, thinkingEnabled, {

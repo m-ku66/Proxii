@@ -124,15 +124,30 @@ interface ChatStore {
   clearError: () => void;
 
   // Message actions
-  resendMessage: (conversationId: string, messageId: string) => Promise<void>;
+  resendMessage: (
+    conversationId: string,
+    messageId: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+    }
+  ) => Promise<void>;
   regenerateMessage: (
     conversationId: string,
-    messageId: string
+    messageId: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+    }
   ) => Promise<void>;
   editMessage: (
     conversationId: string,
     messageId: string,
-    newContent: string
+    newContent: string,
+    options?: {
+      temperature?: number;
+      max_tokens?: number;
+    }
   ) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => void;
 
@@ -606,7 +621,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   clearError: () => set({ error: null }),
 
   // Resend a user message (resubmit the exact same content)
-  resendMessage: async (conversationId, messageId) => {
+  resendMessage: async (conversationId, messageId, options) => {
     const state = get();
     const conversation = state.conversations.find(
       (conv) => conv.id === conversationId
@@ -652,14 +667,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // Now directly call sendMessage with the original content
     try {
-      await get().sendMessage(conversationId, message.content, modelToUse);
+      await get().sendMessage(
+        conversationId,
+        message.content,
+        modelToUse,
+        undefined,
+        options
+      );
     } catch (error) {
       console.error("Failed to resend message:", error);
     }
   },
 
   // Regenerate an AI response (rerun the conversation up to that point)
-  regenerateMessage: async (conversationId, messageId) => {
+  regenerateMessage: async (conversationId, messageId, options) => {
     const state = get();
     const conversation = state.conversations.find(
       (conv) => conv.id === conversationId
@@ -762,8 +783,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const requestParams: any = {
         model: modelToUse,
         messages: apiMessages,
-        temperature: 0.7,
-        max_tokens: 4000,
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.max_tokens ?? 4000,
       };
 
       // Check if original message had thinking and preserve that setting
@@ -851,7 +872,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   // Edit a message and optionally resend
-  editMessage: async (conversationId, messageId, newContent) => {
+  editMessage: async (conversationId, messageId, newContent, options) => {
     const state = get();
     const conversation = state.conversations.find(
       (conv) => conv.id === conversationId
@@ -977,11 +998,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
         // Build request parameters
         const modelToUse = useModelStore.getState().selectedModelId;
+
         const requestParams: any = {
           model: modelToUse,
           messages: apiMessages,
-          temperature: 0.7,
-          max_tokens: 4000,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.max_tokens ?? 4000,
         };
 
         // Stream the response (no thinking for edited messages by default)

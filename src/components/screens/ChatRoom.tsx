@@ -107,6 +107,15 @@ export const ChatRoom = () => {
         currentTitle: '',
     });
 
+    // Track current temperature/max_tokens for resend/regenerate/edit
+    const [currentOptions, setCurrentOptions] = useState<{
+        temperature: number;
+        max_tokens: number;
+    }>({
+        temperature: 0.7,
+        max_tokens: 4000
+    });
+
     const {
         conversations,
         activeConversationId,
@@ -162,6 +171,11 @@ export const ChatRoom = () => {
         }
     ) => {
         if (!activeConversationId) return;
+
+        // Capture current options for later use
+        if (options) {
+            setCurrentOptions(options);
+        }
 
         // 🐛 DEBUG: Log what ChatRoom receives and passes to store
         console.log('📨 ChatRoom received:', {
@@ -224,12 +238,12 @@ export const ChatRoom = () => {
     // Add these handler functions to your ChatRoom component
     const handleResend = async (messageId: string) => {
         if (!activeConversationId) return;
-        await resendMessage(activeConversationId, messageId);
+        await resendMessage(activeConversationId, messageId, currentOptions);
     };
 
     const handleRegenerate = async (messageId: string) => {
         if (!activeConversationId) return;
-        await regenerateMessage(activeConversationId, messageId);
+        await regenerateMessage(activeConversationId, messageId, currentOptions);
     };
 
     const handleEdit = (messageId: string, content: string, role: 'user' | 'assistant') => {
@@ -252,7 +266,7 @@ export const ChatRoom = () => {
 
     const handleEditSave = async (newContent: string) => {
         if (!activeConversationId) return;
-        await editMessage(activeConversationId, editDialog.messageId, newContent);
+        await editMessage(activeConversationId, editDialog.messageId, newContent, currentOptions);
         setEditDialog({ isOpen: false, messageId: '', content: '', role: 'user' });
     };
 

@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import {
     Item,
     ItemContent,
-    ItemDescription,
     ItemGroup,
     ItemTitle,
 } from '@/components/ui/item';

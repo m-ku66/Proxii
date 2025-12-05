@@ -148,7 +148,15 @@ export const ChatRoom = () => {
     const getTotalCharacters = () => {
         if (!activeConversation) return 0;
         return activeConversation.messages.reduce(
-            (sum, msg) => sum + msg.content.length,
+            (sum, msg) => {
+                // Extract text from multimodal content
+                const textContent = typeof msg.content === 'string'
+                    ? msg.content
+                    : msg.content.filter(block => block.type === 'text')
+                        .map(block => (block as any).text)
+                        .join('\n');
+                return sum + textContent.length;
+            },
             0
         );
     };
@@ -168,7 +176,8 @@ export const ChatRoom = () => {
         options?: {
             temperature: number;
             max_tokens: number;
-        }
+        },
+        files?: File[] // ✅ ADD THIS
     ) => {
         if (!activeConversationId) return;
 
@@ -182,11 +191,19 @@ export const ChatRoom = () => {
             temperature: options?.temperature,
             maxTokens: options?.max_tokens,
             thinkingEnabled,
-            model
+            model,
+            filesCount: files?.length || 0 // ✅ ADD THIS
         });
 
         try {
-            await sendMessage(activeConversationId, message, model, thinkingEnabled, options);
+            await sendMessage(
+                activeConversationId,
+                message,
+                model,
+                thinkingEnabled,
+                options,
+                files // ✅ ADD THIS - pass files to sendMessage
+            );
         } catch (error) {
             console.error('Failed to send message:', error);
         }
@@ -358,7 +375,14 @@ export const ChatRoom = () => {
                                                     p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
                                                 }}
                                             >
-                                                {message.content || ' '}
+                                                {/* Extract text for display */}
+                                                {typeof message.content === 'string'
+                                                    ? message.content
+                                                    : message.content
+                                                        .filter(block => block.type === 'text')
+                                                        .map(block => (block as any).text)
+                                                        .join('\n\n') || ' '
+                                                }
                                             </ReactMarkdown>
 
                                             {/* Streaming cursor */}
@@ -378,9 +402,27 @@ export const ChatRoom = () => {
                                                 messageId={message.id}
                                                 role={message.role}
                                                 onResend={handleResend}
-                                                onEdit={(messageId) => handleEdit(messageId, message.content, message.role)}
+                                                onEdit={(messageId) => {
+                                                    // Extract text from content
+                                                    const textContent = typeof message.content === 'string'
+                                                        ? message.content
+                                                        : message.content
+                                                            .filter(block => block.type === 'text')
+                                                            .map(block => (block as any).text)
+                                                            .join('\n\n');
+                                                    handleEdit(messageId, textContent, message.role);
+                                                }}
                                                 onRegenerate={handleRegenerate}
-                                                onEditAI={(messageId) => handleEdit(messageId, message.content, message.role)}
+                                                onEditAI={(messageId) => {
+                                                    // Extract text from content
+                                                    const textContent = typeof message.content === 'string'
+                                                        ? message.content
+                                                        : message.content
+                                                            .filter(block => block.type === 'text')
+                                                            .map(block => (block as any).text)
+                                                            .join('\n\n');
+                                                    handleEdit(messageId, textContent, message.role);
+                                                }}
                                                 onDelete={handleDelete}
                                             />
                                         </div>

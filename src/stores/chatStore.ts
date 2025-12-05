@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { calculateCost } from "@/utils/tokenUtils";
 import { conversationPersistence } from "../services/conversationPersistenceService";
 import type { LocalConversation } from "../types/electron";
+import type { MessageContent } from "@/types/multimodal";
 
 // Thinking capability types
 type ThinkingCapability =
@@ -54,11 +55,37 @@ export const supportsThinking = (modelId: string): ThinkingCapability => {
   return false;
 };
 
+// Helper function to Normalize message content to string for token calculation
+// Extracts all text from multimodal content
+export function extractTextFromContent(content: MessageContent): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  // Extract text from multimodal content array
+  return content
+    .filter((block) => block.type === "text")
+    .map((block) => (block as any).text)
+    .join("\n");
+}
+
+// Helper function to normalize content for API submission
+// Converts both string and multimodal to API format
+function normalizeContentForAPI(content: MessageContent): MessageContent {
+  // If it's already an array, return as-is (already in multimodal format)
+  if (Array.isArray(content)) {
+    return content;
+  }
+
+  // If it's a string, convert to array format for consistency
+  return [{ type: "text", text: content }];
+}
+
 // Types
 export interface Message {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  content: MessageContent;
   timestamp: Date;
   model?: string;
   tokens?: number;
@@ -86,7 +113,7 @@ interface ChatStore {
   createNewChat: (title: string, firstMessage?: Message) => void;
   addMessage: (
     conversationId: string,
-    content: string,
+    content: MessageContent,
     role: "user" | "assistant",
     model?: string,
     tokens?: number,
@@ -116,7 +143,8 @@ interface ChatStore {
     options?: {
       temperature?: number;
       max_tokens?: number;
-    }
+    },
+    files?: File[]
   ) => Promise<void>;
   toggleStar: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
@@ -164,24 +192,27 @@ interface ChatStore {
 
 // Helper function to create a message with calculated tokens/cost
 function createMessage(
-  content: string,
+  content: MessageContent,
   role: "user" | "assistant",
   model?: string,
   tokens?: number,
   cost?: number,
   isStreaming?: boolean
 ): Message {
+  // Extract text for token calculation
+  const textContent = extractTextFromContent(content);
+
   // If tokens/cost are provided (from API), use those
-  // Otherwise calculate estimates
+  // Otherwise calculate estimates using text content
   const metrics =
     tokens !== undefined && cost !== undefined
       ? { tokens, cost }
-      : calculateMessageMetrics(content, role, model);
+      : calculateMessageMetrics(textContent, role, model);
 
   return {
     id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     role,
-    content,
+    content, // ← Store the original multimodal content
     timestamp: new Date(),
     model,
     tokens: metrics.tokens,
@@ -198,8 +229,12 @@ export function calculateConversationTokens(
     ...conversation,
     messages: conversation.messages.map((msg) => {
       if (msg.tokens) return msg;
+
+      // Extract text for token calculation
+      const textContent = extractTextFromContent(msg.content);
+
       const { tokens, cost } = calculateMessageMetrics(
-        msg.content,
+        textContent,
         msg.role,
         msg.model
       );
@@ -288,7 +323,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               ...conv,
               messages: conv.messages.map((msg) =>
                 msg.id === messageId
-                  ? { ...msg, content: msg.content + contentChunk }
+                  ? {
+                      ...msg,
+                      // For streaming, content is always a string being built up
+                      content:
+                        typeof msg.content === "string"
+                          ? msg.content + contentChunk
+                          : msg.content, // Don't modify if it's already multimodal
+                    }
                   : msg
               ),
               updatedAt: new Date(),
@@ -356,79 +398,91 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  /**
-   * Send a message to OpenRouter with streaming support
-   */
   sendMessage: async (
     conversationId,
     content,
     model,
-    thinkingEnabled = false,
-    options = {}
+    thinkingEnabled,
+    options,
+    files
   ) => {
-    // const { temperature = 0.7, max_tokens = 4000 } = options;
-
-    // Set loading state
     set({ isLoading: true, error: null });
 
-    // Create a unique ID for the assistant message
-    const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
     try {
-      // Get the conversation
-      const conversation = get().conversations.find(
-        (conv) => conv.id === conversationId
-      );
+      // Import the multimodal utilities at the top if not already done
+      const { createMultimodalContent } = await import("@/utils/fileUtils");
 
-      if (!conversation) {
-        throw new Error(`Conversation ${conversationId} not found`);
-      }
+      // Create multimodal content from text + files
+      const messageContent: MessageContent =
+        files && files.length > 0
+          ? await createMultimodalContent(content, files)
+          : content; // Plain text if no files
 
-      // Add user message first
-      get().addMessage(conversationId, content, "user");
+      // Create the user message with multimodal content
+      const userMessage = createMessage(messageContent, "user", model);
+
+      // Add user message to conversation
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: [...conv.messages, userMessage],
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+      }));
+
+      // Mark as dirty immediately after user sends message
+      conversationPersistence.markDirty(conversationId);
 
       // Get system prompt from settings
       const systemPrompt = useSettingsStore.getState().systemPrompt;
 
-      // Prepare messages for API (convert to API format)
+      // Get updated conversation for API
+      const conversation = get().conversations.find(
+        (conv) => conv.id === conversationId
+      );
+      if (!conversation) throw new Error("Conversation not found");
+
+      // Prepare messages for API - normalize all content to multimodal format
       const apiMessages: Array<{
         role: "system" | "user" | "assistant";
-        content: string;
-      }> = [
-        ...conversation.messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-        {
-          role: "user" as const,
-          content,
-        },
-      ];
+        content: MessageContent;
+      }> = conversation.messages.map((msg) => ({
+        role: msg.role,
+        content: normalizeContentForAPI(msg.content),
+      }));
 
-      // Prepend system prompt if it exists (only for the first message in conversation)
+      // Prepend system prompt if it exists (only for the first user message)
       if (
         systemPrompt &&
         systemPrompt.trim() &&
-        conversation.messages.length === 0
+        conversation.messages.length === 1 &&
+        conversation.messages[0].role === "user"
       ) {
         apiMessages.unshift({
           role: "system" as const,
-          content: systemPrompt,
+          content: [{ type: "text", text: systemPrompt }],
         });
       }
 
-      // Create an empty assistant message that we'll stream into
+      // Create a unique ID for the assistant message
+      const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Create streaming message
       const streamingMessage: Message = {
         id: assistantMessageId,
         role: "assistant",
-        content: "",
+        content: "", // Start with empty string for streaming
         timestamp: new Date(),
         model,
         isStreaming: true,
         thinkingTokens: "",
       };
 
-      // Add the streaming message to the conversation
+      // Add streaming message to conversation
       set((state) => ({
         conversations: state.conversations.map((conv) =>
           conv.id === conversationId
@@ -449,54 +503,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         max_tokens: options?.max_tokens ?? 4000,
       };
 
-      // 🐛 DEBUG: Log final API parameters
-      console.log("🚀 chatStore sending to API:", {
-        model: requestParams.model,
-        temperature: requestParams.temperature,
-        max_tokens: requestParams.max_tokens,
-        messageCount: apiMessages.length,
-        thinkingEnabled,
-      });
-      // Check if model supports thinking and apply appropriate parameters
+      // Add thinking/reasoning parameters based on model capability
       const thinkingCapability = supportsThinking(model);
 
       if (thinkingEnabled && thinkingCapability) {
-        switch (thinkingCapability) {
-          case "reasoning_effort":
-            // OpenAI o1 models use reasoning.effort
-            requestParams.reasoning = {
-              effort: "high",
-            };
-            break;
-
-          case "thinking":
-            // Claude models use reasoning.max_tokens
-            requestParams.reasoning = {
-              max_tokens: 1024,
-            };
-            break;
-
-          case "max_reasoning_tokens":
-            // Gemini models use reasoning.max_tokens
-            requestParams.reasoning = {
-              max_tokens: 8000,
-            };
-            break;
-
-          case "always":
-            // DeepSeek - always thinks, no parameters needed
-            break;
+        if (thinkingCapability === "reasoning_effort") {
+          requestParams.reasoning_effort = "high";
+        } else if (thinkingCapability === "thinking") {
+          requestParams.thinking = {
+            type: "enabled",
+            budget_tokens: 10000,
+          };
+        } else if (thinkingCapability === "max_reasoning_tokens") {
+          requestParams.max_reasoning_tokens = 8000;
         }
       }
 
       // Stream the response
       await sendChatCompletionStream(requestParams, {
-        // Handle each content chunk
         onContent: (chunk) => {
           get().updateMessageContent(conversationId, assistantMessageId, chunk);
         },
-
-        // Handle thinking tokens (for models that support it)
         onThinking: (thinking) => {
           get().updateMessageThinking(
             conversationId,
@@ -504,54 +531,53 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             thinking
           );
         },
-
-        // Handle completion with usage stats
         onComplete: (usage) => {
-          // Calculate cost using ACTUAL pricing from OpenRouter
-          // const modelData = useModelStore
-          //   .getState()
-          //   .availableModels.find((m) => m.id === model);
-
-          let totalCost = 0;
-
-          // Calculate cost using proper pricing utilities
-          const inputCost = calculateCost(usage.prompt_tokens, model, false); // false = input tokens
+          const inputCost = calculateCost(usage.prompt_tokens, model, false);
           const outputCost = calculateCost(
             usage.completion_tokens,
             model,
             true
-          ); // true = output tokens
-          totalCost = inputCost + outputCost;
+          );
+          const totalCost = inputCost + outputCost;
 
-          // Finalize the message with real token counts and cost
           get().finalizeMessage(
             conversationId,
             assistantMessageId,
             usage.completion_tokens,
             totalCost
           );
-
           set({ isLoading: false });
-        },
 
-        // Handle errors
+          // Mark as dirty after AI response completes
+          conversationPersistence.markDirty(conversationId);
+        },
         onError: (error) => {
-          set({
-            isLoading: false,
-            error: error.message,
-          });
+          set({ isLoading: false, error: error.message });
           console.error("Streaming error:", error);
+
+          // Remove failed streaming message
+          set((state) => ({
+            conversations: state.conversations.map((conv) =>
+              conv.id === conversationId
+                ? {
+                    ...conv,
+                    messages: conv.messages.filter(
+                      (msg) => msg.id !== assistantMessageId
+                    ),
+                    updatedAt: new Date(),
+                  }
+                : conv
+            ),
+          }));
         },
       });
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
+      console.error("Failed to send message:", error);
       set({
         isLoading: false,
-        error: errorMessage,
+        error:
+          error instanceof Error ? error.message : "Failed to send message",
       });
-      console.error("Error sending message:", error);
-      throw error;
     }
   },
 
@@ -665,14 +691,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     //  Mark as dirty after truncating conversation
     conversationPersistence.markDirty(conversationId);
 
-    // Now directly call sendMessage with the original content
+    // Extract text from the message content (ignore any files for resend)
+    const textContent = extractTextFromContent(message.content);
+
+    // Now directly call sendMessage with the extracted text (no files on resend)
     try {
       await get().sendMessage(
         conversationId,
-        message.content,
+        textContent, // ✅ Pass text, not full MessageContent
         modelToUse,
         undefined,
         options
+        // Note: No files parameter - resend is text only
       );
     } catch (error) {
       console.error("Failed to resend message:", error);
@@ -736,10 +766,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Prepare messages for API (use existing conversation up to this point)
       const apiMessages: Array<{
         role: "system" | "user" | "assistant";
-        content: string;
+        content: MessageContent;
       }> = messagesToKeep.map((msg) => ({
         role: msg.role,
-        content: msg.content,
+        content: normalizeContentForAPI(msg.content),
       }));
 
       // Prepend system prompt if it exists (only for the first message in conversation)
@@ -751,7 +781,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ) {
         apiMessages.unshift({
           role: "system" as const,
-          content: systemPrompt,
+          content: [{ type: "text", text: systemPrompt }], // ✅ Array format
         });
       }
 
@@ -953,10 +983,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // Prepare messages for API (use the updated conversation)
         const apiMessages: Array<{
           role: "system" | "user" | "assistant";
-          content: string;
+          content: MessageContent;
         }> = updatedMessages.map((msg) => ({
           role: msg.role,
-          content: msg.content,
+          content: normalizeContentForAPI(msg.content),
         }));
 
         // Prepend system prompt if it exists (only for the first message)
@@ -968,7 +998,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ) {
           apiMessages.unshift({
             role: "system" as const,
-            content: systemPrompt,
+            content: [{ type: "text", text: systemPrompt }], // ✅ Array format
           });
         }
 

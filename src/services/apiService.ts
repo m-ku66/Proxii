@@ -6,10 +6,11 @@
 
 import { useSettingsStore } from "@/stores/settingsStore";
 import { sanitizeMessageContent } from "@/utils/messageUtils";
+import type { MessageContent } from "@/types/multimodal";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
-  content: string;
+  content: MessageContent;
 }
 
 export interface ChatCompletionRequest {

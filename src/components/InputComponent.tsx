@@ -9,6 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { Paperclip, Settings, Send } from 'lucide-react';
+import { FilePreviewBubble } from './FilePreviewBubble';
+import { AttachedFile, MAX_FILES_PER_MESSAGE } from '@/types/multimodal';
+import {
+    createAttachedFile,
+    cleanupAttachedFiles,
+    validateFiles,
+} from '@/utils/fileUtils';
+import { toast } from 'sonner';
 
 interface InputComponentProps {
     onSubmit?: (
@@ -18,12 +26,13 @@ interface InputComponentProps {
         options?: {
             temperature: number;
             max_tokens: number;
-        }
+        },
+        files?: File[] // NEW: Add files parameter
     ) => void;
-    onFileUpload?: (file: File) => void;
+    onFileUpload?: (file: File) => void; // Keep for backwards compatibility but won't be used
 }
 
-export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) => {
+export const InputComponent = ({ onSubmit }: InputComponentProps) => {
     const { getUserModels, selectedModelId, setSelectedModel } = useModelStore();
     const userModels = getUserModels();
 
@@ -31,28 +40,24 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
     const [temperature, setTemperature] = useState(0.7);
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabledRaw] = useState(false);
+    const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]); // NEW: File state
 
     const setThinkingEnabled = (value: boolean) => {
-        // console.log('Setting thinking enabled to:', value);
         setThinkingEnabledRaw(value);
     };
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    const MAX_HEIGHT = 200; // px, tweak to taste
+    const MAX_HEIGHT = 200;
 
-    // Check if selected model supports thinking
     const thinkingCapability = supportsThinking(selectedModelId || '');
 
-    // Auto-select first model if nothing is selected
     useEffect(() => {
         if (!selectedModelId && userModels.length > 0) {
             setSelectedModel(userModels[0].id);
         }
     }, [selectedModelId, userModels, setSelectedModel]);
 
-    // Auto-disable thinking toggle when switching to non-thinking model
-    // Auto-enable for 'always' thinking models like DeepSeek
     useEffect(() => {
         if (thinkingCapability === 'always') {
             setThinkingEnabled(true);
@@ -61,12 +66,11 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
         }
     }, [selectedModelId, thinkingCapability]);
 
-    // Auto-resize textarea based on content
     const adjustTextareaHeight = () => {
         const textarea = textareaRef.current;
         if (!textarea) return;
 
-        textarea.style.height = "auto"; // reset first
+        textarea.style.height = "auto";
         const newHeight = textarea.scrollHeight;
 
         if (newHeight > MAX_HEIGHT) {
@@ -78,26 +82,40 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
         }
     };
 
-    // Adjust height when message changes
     useEffect(() => {
         adjustTextareaHeight();
     }, [message]);
 
+    // NEW: Cleanup preview URLs on unmount
+    useEffect(() => {
+        return () => {
+            cleanupAttachedFiles(attachedFiles);
+        };
+    }, []);
+
     const handleSubmit = () => {
-        // 🐛 DEBUG: Log what InputComponent is sending
         console.log('📤 InputComponent sending:', {
             temperature,
             maxTokens,
             thinkingEnabled,
-            selectedModel: selectedModelId
+            selectedModel: selectedModelId,
+            filesCount: attachedFiles.length,
         });
 
         if (message.trim() && selectedModelId) {
+            // Pass the actual File objects to onSubmit
+            const files = attachedFiles.map(af => af.file);
+
             onSubmit?.(message, selectedModelId, thinkingEnabled, {
                 temperature,
                 max_tokens: maxTokens,
-            });
+            }, files); // NEW: Pass files
+
             setMessage('');
+
+            // NEW: Clean up and clear files after submit
+            cleanupAttachedFiles(attachedFiles);
+            setAttachedFiles([]);
         }
     };
 
@@ -108,19 +126,53 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
         }
     };
 
+    // NEW: Updated to handle multiple files
     const handleFileClick = () => {
         const input = document.createElement('input');
         input.type = 'file';
+        input.multiple = true; // Allow multiple file selection
+        input.accept = 'image/*,application/pdf,audio/*,video/*'; // Hint at supported types
+
         input.onchange = (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (file) {
-                onFileUpload?.(file);
+            const files = Array.from((e.target as HTMLInputElement).files || []);
+
+            if (files.length === 0) return;
+
+            // Check if adding these files would exceed the limit
+            const totalFiles = attachedFiles.length + files.length;
+            if (totalFiles > MAX_FILES_PER_MESSAGE) {
+                toast.error(`Maximum ${MAX_FILES_PER_MESSAGE} files per message. You're trying to add ${files.length} more to ${attachedFiles.length} existing.`);
+                return;
             }
+
+            // Validate all new files
+            const validation = validateFiles(files);
+            if (!validation.valid) {
+                toast.error(validation.error || 'File validation failed');
+                return;
+            }
+
+            // Create AttachedFile objects (includes preview URLs for images)
+            const newAttachedFiles = files.map(createAttachedFile);
+
+            setAttachedFiles(prev => [...prev, ...newAttachedFiles]);
+            toast.success(`${files.length} ${files.length === 1 ? 'file' : 'files'} attached`);
         };
+
         input.click();
     };
 
-    // Get helper text based on thinking capability
+    // NEW: Remove a file
+    const handleRemoveFile = (fileId: string) => {
+        setAttachedFiles(prev => {
+            const toRemove = prev.find(f => f.id === fileId);
+            if (toRemove) {
+                cleanupAttachedFiles([toRemove]); // Clean up preview URL
+            }
+            return prev.filter(f => f.id !== fileId);
+        });
+    };
+
     const getThinkingHelperText = () => {
         switch (thinkingCapability) {
             case 'always':
@@ -138,6 +190,9 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
 
     return (
         <div className="w-full max-w-3xl mx-auto space-y-2">
+            {/* NEW: File preview bubble */}
+            <FilePreviewBubble files={attachedFiles} onRemove={handleRemoveFile} />
+
             {/* Textarea Field */}
             <Textarea
                 ref={textareaRef}
@@ -158,7 +213,7 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                         variant="ghost"
                         size="sm"
                         onClick={handleFileClick}
-                        title="Upload file"
+                        title="Upload files"
                     >
                         <Paperclip className="h-4 w-4" />
                     </Button>
@@ -173,7 +228,6 @@ export const InputComponent = ({ onSubmit, onFileUpload }: InputComponentProps) 
                             <div className="space-y-4">
                                 <h4 className="font-medium">Model Settings</h4>
 
-                                {/* Extended Thinking Toggle */}
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
                                         <Label htmlFor="thinking-mode" className="text-sm font-medium">

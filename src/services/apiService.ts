@@ -168,6 +168,15 @@ export async function sendChatCompletionStream(
 
     if (!response.ok) {
       const errorData: ChatCompletionError = await response.json();
+
+      // 🔍 DEBUG: Log full error details
+      console.error("❌ OpenRouter API Error:", {
+        status: response.status,
+        statusText: response.statusText,
+        errorData: errorData,
+        requestPayloadSize: JSON.stringify(request).length,
+      });
+
       const error = new Error(
         errorData.error?.message || `API request failed: ${response.status}`
       );

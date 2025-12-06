@@ -16,6 +16,8 @@ import {
   MessageFileAttachment,
 } from "@/types/multimodal";
 
+import { compressImage } from "./imageCompression";
+
 /**
  * Validation result for file checks
  */
@@ -112,23 +114,26 @@ export function validateFiles(files: File[]): FileValidationResult {
 
 /**
  * Encode a file to base64
+ * Returns ONLY the base64 string (without data URI prefix)
  */
-export function encodeFileToBase64(file: File): Promise<string> {
+export async function encodeFileToBase64(file: File): Promise<string> {
+  let fileToEncode = file;
+
+  // Compress images if they're too large
+  if (file.type.startsWith("image/")) {
+    fileToEncode = await compressImage(file);
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-
+    reader.readAsDataURL(fileToEncode);
     reader.onload = () => {
       const result = reader.result as string;
-      // Extract just the base64 data (remove data URI prefix)
-      const base64Data = result.split(",")[1];
-      resolve(base64Data);
+      // Extract ONLY the base64 part (remove "data:image/jpeg;base64," prefix)
+      const base64 = result.split(",")[1];
+      resolve(base64);
     };
-
-    reader.onerror = () => {
-      reject(new Error(`Failed to read file: ${file.name}`));
-    };
-
-    reader.readAsDataURL(file);
+    reader.onerror = (error) => reject(error);
   });
 }
 

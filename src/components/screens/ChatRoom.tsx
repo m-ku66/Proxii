@@ -14,6 +14,8 @@ import ReactMarkdown from 'react-markdown';
 import { MessageActions } from '@/components/MessageActions';
 import { EditMessageDialog } from '@/components/EditMessageDialog';
 import { toast } from 'sonner';
+import { FileText, Music, Film } from 'lucide-react';
+import { formatFileSize } from '@/utils/fileUtils';
 
 
 // Thinking bubble component
@@ -345,8 +347,9 @@ export const ChatRoom = () => {
                                     }`}
                             >
                                 <div className="flex flex-col gap-2 max-w-[80%]">
+                                    {/* Message bubble content */}
                                     <div
-                                        className={`w-full rounded-lg p-4 ${message.role === 'user'
+                                        className={`rounded-lg p-4 ${message.role === 'user'
                                             ? 'bg-primary text-primary-foreground'
                                             : 'bg-muted'
                                             } ${message.isStreaming ? 'animate-pulse' : ''}`}
@@ -356,6 +359,65 @@ export const ChatRoom = () => {
                                             <ThinkingBubble thinkingTokens={message.thinkingTokens} />
                                         )}
 
+                                        {/* 🆕 FILE ATTACHMENTS DISPLAY */}
+                                        {message.files && message.files.length > 0 && (
+                                            <div className="mb-3 space-y-2">
+                                                {/* Image thumbnails */}
+                                                {message.files.some(f => f.type.startsWith('image/')) && (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {message.files
+                                                            .filter(f => f.type.startsWith('image/'))
+                                                            .map((file, idx) => (
+                                                                <div
+                                                                    key={idx}
+                                                                    className="relative rounded overflow-hidden border border-white/20"
+                                                                >
+                                                                    <img
+                                                                        src={file.url}
+                                                                        alt={file.name}
+                                                                        className="w-full h-32 object-cover"
+                                                                    />
+                                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs truncate">
+                                                                        {file.name}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Other file types (PDF, audio, video) */}
+                                                {message.files.some(f => !f.type.startsWith('image/')) && (
+                                                    <div className="space-y-1">
+                                                        {message.files
+                                                            .filter(f => !f.type.startsWith('image/'))
+                                                            .map((file, idx) => {
+                                                                const isPDF = file.type === 'application/pdf';
+                                                                const isAudio = file.type.startsWith('audio/');
+                                                                const isVideo = file.type.startsWith('video/');
+
+                                                                return (
+                                                                    <div
+                                                                        key={idx}
+                                                                        className="flex items-center gap-2 px-3 py-2 rounded bg-white/10 border border-white/20"
+                                                                    >
+                                                                        {isPDF && <FileText className="h-4 w-4" />}
+                                                                        {isAudio && <Music className="h-4 w-4" />}
+                                                                        {isVideo && <Film className="h-4 w-4" />}
+                                                                        <span className="text-sm truncate flex-1">
+                                                                            {file.name}
+                                                                        </span>
+                                                                        <span className="text-xs opacity-70">
+                                                                            {formatFileSize(file.size)}
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Message content (existing code) */}
                                         <div className="prose prose-sm dark:prose-invert max-w-none break-words">
                                             <ReactMarkdown
                                                 components={{

@@ -101,6 +101,17 @@ export interface AttachedFile {
 }
 
 /**
+ * File attachment metadata for messages
+ * Stores display information without the actual File object
+ */
+export interface MessageFileAttachment {
+  name: string;
+  type: string; // MIME type
+  size: number;
+  url: string; // Data URI for display
+}
+
+/**
  * File type categories for validation and UI
  */
 export type FileCategory = "image" | "document" | "audio" | "video" | "unknown";

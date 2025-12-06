@@ -6,7 +6,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { calculateCost } from "@/utils/tokenUtils";
 import { conversationPersistence } from "../services/conversationPersistenceService";
 import type { LocalConversation } from "../types/electron";
-import type { MessageContent } from "@/types/multimodal";
+import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
 
 // Thinking capability types
 type ThinkingCapability =
@@ -92,6 +92,7 @@ export interface Message {
   cost?: number;
   thinkingTokens?: string; // Thinking/reasoning content (for models that support it)
   isStreaming?: boolean; // Currently streaming?
+  files?: MessageFileAttachment[];
 }
 
 export interface Conversation {
@@ -197,7 +198,8 @@ function createMessage(
   model?: string,
   tokens?: number,
   cost?: number,
-  isStreaming?: boolean
+  isStreaming?: boolean,
+  files?: MessageFileAttachment[]
 ): Message {
   // Extract text for token calculation
   const textContent = extractTextFromContent(content);
@@ -210,7 +212,7 @@ function createMessage(
       : calculateMessageMetrics(textContent, role, model);
 
   return {
-    id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
     role,
     content, // ← Store the original multimodal content
     timestamp: new Date(),
@@ -218,6 +220,7 @@ function createMessage(
     tokens: metrics.tokens,
     cost: metrics.cost,
     isStreaming: isStreaming || false,
+    files,
   };
 }
 
@@ -410,7 +413,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       // Import the multimodal utilities at the top if not already done
-      const { createMultimodalContent } = await import("@/utils/fileUtils");
+      const { createMultimodalContent, createMessageFileAttachments } =
+        await import("@/utils/fileUtils");
 
       // Create multimodal content from text + files
       const messageContent: MessageContent =
@@ -418,8 +422,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           ? await createMultimodalContent(content, files)
           : content; // Plain text if no files
 
-      // Create the user message with multimodal content
-      const userMessage = createMessage(messageContent, "user", model);
+      // Convert files to message attachments for storage
+      const messageFiles =
+        files && files.length > 0
+          ? createMessageFileAttachments(files)
+          : undefined;
+
+      // Create the user message with multimodal content AND file metadata
+      const userMessage = createMessage(
+        messageContent,
+        "user",
+        model,
+        undefined,
+        undefined,
+        undefined,
+        messageFiles
+      );
 
       // Add user message to conversation
       set((state) => ({

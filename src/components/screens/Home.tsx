@@ -13,7 +13,8 @@ export const Home = () => {
         options?: {
             temperature: number;
             max_tokens: number;
-        }
+        },
+        files?: File[]
     ) => {
         // Create a new chat with the first message as the title (truncated)
         const title = message.length > 50 ? message.substring(0, 50) + '...' : message;
@@ -26,8 +27,8 @@ export const Home = () => {
 
         if (newChatId) {
             try {
-                // Send the message
-                await sendMessage(newChatId, message, model, thinkingEnabled, options);
+                // Send the message with files
+                await sendMessage(newChatId, message, model, thinkingEnabled, options, files);
 
                 // Navigate to chat room
                 setActiveScreen('chatRoom');
@@ -35,11 +36,6 @@ export const Home = () => {
                 console.error('Failed to send message:', error);
             }
         }
-    };
-
-    const handleFileUpload = (file: File) => {
-        console.log('File uploaded:', file.name);
-        // TODO: Handle file upload
     };
 
     return (
@@ -52,10 +48,7 @@ export const Home = () => {
                     </p>
                 </div>
 
-                <InputComponent
-                    onSubmit={handleSubmit}
-                    onFileUpload={handleFileUpload}
-                />
+                <InputComponent onSubmit={handleSubmit} />
             </div>
         </div>
     );

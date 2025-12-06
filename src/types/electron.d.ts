@@ -1,4 +1,5 @@
 // Global type declarations for the Electron API exposed via preload script
+import type { MessageFileAttachment } from "./multimodal";
 
 export interface LocalConversation {
   id: string;
@@ -19,6 +20,7 @@ export interface Message {
   cost?: number;
   thinkingTokens?: string;
   isStreaming?: boolean;
+  files?: MessageFileAttachment[];
 }
 
 interface ElectronAPI {

@@ -13,6 +13,7 @@ import {
   MAX_FILES_PER_MESSAGE,
   AudioFormat,
   AttachedFile,
+  MessageFileAttachment,
 } from "@/types/multimodal";
 
 /**
@@ -128,6 +129,35 @@ export function encodeFileToBase64(file: File): Promise<string> {
     };
 
     reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Convert File objects to MessageFileAttachment for storage
+ * Extracts only the display metadata (no File object or base64 data)
+ */
+export function createMessageFileAttachments(
+  files: File[]
+): MessageFileAttachment[] {
+  return files.map((file) => {
+    const category = getFileCategory(file.type);
+    let url = "";
+
+    // For images, create a data URI for display
+    if (category === "image") {
+      try {
+        url = createImagePreview(file);
+      } catch (error) {
+        console.error("Failed to create image preview:", error);
+      }
+    }
+
+    return {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      url, // Data URI for images, empty for others
+    };
   });
 }
 

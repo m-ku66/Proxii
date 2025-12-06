@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from "electron";
+import { MessageFileAttachment } from "./types/multimodal";
 
 // Define conversation type (matching your existing store)
 export interface Conversation {
@@ -23,6 +24,7 @@ export interface Message {
   cost?: number;
   thinkingTokens?: string;
   isStreaming?: boolean;
+  files?: MessageFileAttachment[];
 }
 
 // Define the types for our API

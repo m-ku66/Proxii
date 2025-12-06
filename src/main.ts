@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import path from "node:path";
+import fs from "node:fs/promises";
 import started from "electron-squirrel-startup";
 import { ConversationFileService } from "./services/conversationFileService";
 import type { Conversation } from "./preload";
@@ -122,6 +123,97 @@ ipcMain.handle("app:get-conversations-path", async () => {
 ipcMain.handle("app:open-conversations-folder", async () => {
   const conversationsPath = conversationService.getConversationsPath();
   await shell.openPath(conversationsPath);
+});
+
+// Save an asset file to conversation's asset directory
+ipcMain.handle(
+  "assets:save",
+  async (_, conversationId: string, filename: string, buffer: ArrayBuffer) => {
+    try {
+      const conversationsPath = conversationService.getConversationsPath();
+      const assetsDir = path.join(conversationsPath, conversationId, "assets");
+
+      // Ensure assets directory exists
+      await fs.mkdir(assetsDir, { recursive: true });
+
+      // Write the file
+      const filePath = path.join(assetsDir, filename);
+      await fs.writeFile(filePath, Buffer.from(buffer));
+
+      console.log(
+        `💾 Saved asset: ${filename} for conversation ${conversationId}`
+      );
+    } catch (error) {
+      console.error("Failed to save asset:", error);
+      throw error;
+    }
+  }
+);
+
+// Load an asset file from conversation's asset directory
+ipcMain.handle(
+  "assets:load",
+  async (_, conversationId: string, filename: string) => {
+    try {
+      const conversationsPath = conversationService.getConversationsPath();
+      const filePath = path.join(
+        conversationsPath,
+        conversationId,
+        "assets",
+        filename
+      );
+
+      const buffer = await fs.readFile(filePath);
+      return buffer.buffer; // Return ArrayBuffer
+    } catch (error) {
+      console.error("Failed to load asset:", error);
+      throw error;
+    }
+  }
+);
+
+// Delete a specific asset file
+ipcMain.handle(
+  "assets:delete",
+  async (_, conversationId: string, filename: string) => {
+    try {
+      const conversationsPath = conversationService.getConversationsPath();
+      const filePath = path.join(
+        conversationsPath,
+        conversationId,
+        "assets",
+        filename
+      );
+
+      await fs.unlink(filePath);
+      console.log(
+        `🗑️ Deleted asset: ${filename} for conversation ${conversationId}`
+      );
+    } catch (error) {
+      // Don't throw if file doesn't exist
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error("Failed to delete asset:", error);
+        throw error;
+      }
+    }
+  }
+);
+
+// Delete all assets for a conversation
+ipcMain.handle("assets:delete-all", async (_, conversationId: string) => {
+  try {
+    const conversationsPath = conversationService.getConversationsPath();
+    const assetsDir = path.join(conversationsPath, conversationId, "assets");
+
+    await fs.rm(assetsDir, { recursive: true, force: true });
+    console.log(`🗑️ Deleted all assets for conversation ${conversationId}`);
+  } catch (error) {
+    console.error("Failed to delete conversation assets:", error);
+    // Don't throw if directory doesn't exist
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
 });
 
 // This method will be called when Electron has finished

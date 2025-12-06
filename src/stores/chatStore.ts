@@ -7,6 +7,7 @@ import { calculateCost } from "@/utils/tokenUtils";
 import { conversationPersistence } from "../services/conversationPersistenceService";
 import type { LocalConversation } from "../types/electron";
 import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
+import { loadAssetAsBlob } from "@/utils/fileUtils";
 
 // Thinking capability types
 type ThinkingCapability =
@@ -178,8 +179,7 @@ interface ChatStore {
       max_tokens?: number;
     }
   ) => Promise<void>;
-  deleteMessage: (conversationId: string, messageId: string) => void;
-
+  deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
   // Persistence methods
   setConversationsFromDisk: (conversations: Conversation[]) => void;
   exportConversation: (
@@ -412,21 +412,41 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Import the multimodal utilities at the top if not already done
-      const { createMultimodalContent, createMessageFileAttachments } =
+      // Import file utilities
+      const { createMultimodalContent, saveAsset, getFileCategory } =
         await import("@/utils/fileUtils");
 
-      // Create multimodal content from text + files
+      // Create multimodal content from text + files (for API)
       const messageContent: MessageContent =
         files && files.length > 0
           ? await createMultimodalContent(content, files)
-          : content; // Plain text if no files
+          : content;
 
-      // Convert files to message attachments for storage
-      const messageFiles =
-        files && files.length > 0
-          ? createMessageFileAttachments(files)
-          : undefined;
+      // Save files to disk and build attachment metadata
+      let messageFiles: MessageFileAttachment[] | undefined;
+      if (files && files.length > 0) {
+        // We need a message ID before saving assets
+        const tempMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+        messageFiles = await Promise.all(
+          files.map(async (file) => {
+            // Save file to disk and get the asset path
+            const assetPath = await saveAsset(
+              conversationId,
+              file,
+              tempMessageId
+            );
+
+            // Build the attachment metadata
+            return {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              url: assetPath, // Store the relative path instead of blob URL
+            };
+          })
+        );
+      }
 
       // Create the user message with multimodal content AND file metadata
       const userMessage = createMessage(
@@ -612,7 +632,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteConversation: async (conversationId) => {
     try {
-      //  Remove from disk first
+      // Delete all assets for this conversation
+      const { deleteConversationAssets } = await import("@/utils/fileUtils");
+
+      try {
+        await deleteConversationAssets(conversationId);
+        console.log(`🗑️ Deleted all assets for conversation ${conversationId}`);
+      } catch (error) {
+        console.error("Failed to delete conversation assets:", error);
+        // Continue with conversation deletion even if asset cleanup fails
+      }
+
+      // Remove conversation JSON from disk
       await conversationPersistence.deleteConversation(conversationId);
 
       // Then remove from state
@@ -1121,8 +1152,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  // Delete a message
-  deleteMessage: (conversationId, messageId) => {
+  deleteMessage: async (conversationId, messageId) => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (conv) => conv.id === conversationId
+    );
+    const message = conversation?.messages.find((msg) => msg.id === messageId);
+
+    // If message has files, delete the assets from disk
+    if (message?.files && message.files.length > 0) {
+      const { deleteAsset } = await import("@/utils/fileUtils");
+
+      try {
+        // Delete each asset file
+        await Promise.all(
+          message.files.map((file) => deleteAsset(conversationId, file.url))
+        );
+        console.log(
+          `🗑️ Deleted ${message.files.length} asset(s) for message ${messageId}`
+        );
+      } catch (error) {
+        console.error("Failed to delete message assets:", error);
+        // Continue with message deletion even if asset cleanup fails
+      }
+    }
+
+    // Remove message from state
     set((state) => ({
       conversations: state.conversations.map((conv) =>
         conv.id === conversationId
@@ -1135,13 +1190,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    //  Mark as dirty after deleting message
     conversationPersistence.markDirty(conversationId);
   },
 
   // ✨ NEW: Persistence methods
-  setConversationsFromDisk: (conversations) => {
-    set({ conversations });
+  setConversationsFromDisk: async (conversations) => {
+    // Transform asset paths to blob URLs for each message with files
+    const transformedConversations = await Promise.all(
+      conversations.map(async (conv) => ({
+        ...conv,
+        messages: await Promise.all(
+          conv.messages.map(async (msg) => {
+            if (!msg.files || msg.files.length === 0) return msg;
+
+            // Convert asset paths to blob URLs
+            const transformedFiles = await Promise.all(
+              msg.files.map(async (file) => {
+                const blobUrl = await loadAssetAsBlob(conv.id, file.url);
+                return { ...file, url: blobUrl };
+              })
+            );
+
+            return { ...msg, files: transformedFiles };
+          })
+        ),
+      }))
+    );
+
+    set({ conversations: transformedConversations });
   },
 
   exportConversation: async (conversation, format) => {

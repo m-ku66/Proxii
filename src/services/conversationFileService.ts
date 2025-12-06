@@ -45,15 +45,21 @@ export class ConversationFileService {
     try {
       await this.ensureConversationsDirectory();
 
-      const files = await fs.readdir(this.conversationsPath);
-      const jsonFiles = files.filter((file) => path.extname(file) === ".json");
+      const entries = await fs.readdir(this.conversationsPath, {
+        withFileTypes: true,
+      });
+      const conversationDirs = entries.filter((entry) => entry.isDirectory());
 
       const conversations: Conversation[] = [];
 
-      for (const file of jsonFiles) {
+      for (const dir of conversationDirs) {
         try {
-          const filePath = path.join(this.conversationsPath, file);
-          const content = await fs.readFile(filePath, "utf-8");
+          const conversationPath = path.join(
+            this.conversationsPath,
+            dir.name,
+            "conversation.json"
+          );
+          const content = await fs.readFile(conversationPath, "utf-8");
           const conversation = JSON.parse(content);
 
           // Convert date strings back to Date objects
@@ -66,8 +72,11 @@ export class ConversationFileService {
 
           conversations.push(conversation);
         } catch (fileError) {
-          console.error(`Failed to load conversation from ${file}:`, fileError);
-          // Skip corrupted files but continue loading others
+          console.error(
+            `Failed to load conversation from ${dir.name}:`,
+            fileError
+          );
+          // Skip corrupted folders but continue loading others
         }
       }
 
@@ -91,10 +100,15 @@ export class ConversationFileService {
     try {
       await this.ensureConversationsDirectory();
 
-      const filePath = path.join(
+      // Create conversation folder
+      const conversationDir = path.join(
         this.conversationsPath,
-        `${conversation.id}.json`
+        conversation.id
       );
+      await fs.mkdir(conversationDir, { recursive: true });
+
+      // Save JSON inside the folder
+      const filePath = path.join(conversationDir, "conversation.json");
       const content = JSON.stringify(conversation, null, 2);
 
       await fs.writeFile(filePath, content, "utf-8");
@@ -110,12 +124,10 @@ export class ConversationFileService {
    */
   async deleteConversation(conversationId: string): Promise<void> {
     try {
-      const filePath = path.join(
-        this.conversationsPath,
-        `${conversationId}.json`
-      );
-      await fs.unlink(filePath);
-      console.log(`Deleted conversation: ${conversationId}`);
+      // Delete the entire conversation folder (includes JSON + assets)
+      const conversationDir = path.join(this.conversationsPath, conversationId);
+      await fs.rm(conversationDir, { recursive: true, force: true });
+      console.log(`Deleted conversation folder: ${conversationId}`);
     } catch (error) {
       console.error(`Failed to delete conversation ${conversationId}:`, error);
       throw error;

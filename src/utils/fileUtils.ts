@@ -13,7 +13,7 @@ import {
   MAX_FILES_PER_MESSAGE,
   AudioFormat,
   AttachedFile,
-  MessageFileAttachment,
+  // MessageFileAttachment,
 } from "@/types/multimodal";
 
 import { compressImage } from "./imageCompression";
@@ -141,29 +141,109 @@ export async function encodeFileToBase64(file: File): Promise<string> {
  * Convert File objects to MessageFileAttachment for storage
  * Extracts only the display metadata (no File object or base64 data)
  */
-export function createMessageFileAttachments(
-  files: File[]
-): MessageFileAttachment[] {
-  return files.map((file) => {
-    const category = getFileCategory(file.type);
-    let url = "";
+// export function createMessageFileAttachments(
+//   files: File[]
+// ): MessageFileAttachment[] {
+//   return files.map((file) => {
+//     const category = getFileCategory(file.type);
+//     let url = "";
 
-    // For images, create a data URI for display
-    if (category === "image") {
-      try {
-        url = createImagePreview(file);
-      } catch (error) {
-        console.error("Failed to create image preview:", error);
-      }
-    }
+//     // For images, create a data URI for display
+//     if (category === "image") {
+//       try {
+//         url = createImagePreview(file);
+//       } catch (error) {
+//         console.error("Failed to create image preview:", error);
+//       }
+//     }
 
-    return {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      url, // Data URI for images, empty for others
-    };
-  });
+//     return {
+//       name: file.name,
+//       type: file.type,
+//       size: file.size,
+//       url, // Data URI for images, empty for others
+//     };
+//   });
+// }
+
+/**
+ * Generates a unique filename for an asset
+ * Format: {timestamp}_{messageId}_{originalName}
+ */
+export function generateAssetFilename(
+  originalName: string,
+  messageId: string
+): string {
+  const timestamp = Date.now();
+  const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
+  return `${timestamp}_${messageId}_${sanitizedName}`;
+}
+
+/**
+ * Builds the relative asset path for storage in message JSON
+ * Returns: "assets/{filename}"
+ */
+export function getAssetPath(filename: string): string {
+  return `assets/${filename}`;
+}
+
+/**
+ * Saves a file to the conversation's asset directory
+ * Returns the relative path to store in message JSON
+ */
+export async function saveAsset(
+  conversationId: string,
+  file: File,
+  messageId: string
+): Promise<string> {
+  const filename = generateAssetFilename(file.name, messageId);
+  const assetPath = getAssetPath(filename);
+
+  // Convert file to buffer for IPC
+  const buffer = await file.arrayBuffer();
+
+  // IPC call to main process to save file
+  await window.electronAPI.assets.save(conversationId, filename, buffer);
+
+  return assetPath; // Return relative path like "assets/image_123.jpg"
+}
+
+/**
+ * Loads an asset from disk and creates a blob URL for display
+ */
+export async function loadAssetAsBlob(
+  conversationId: string,
+  assetPath: string
+): Promise<string> {
+  // Extract filename from path (remove "assets/" prefix)
+  const filename = assetPath.replace("assets/", "");
+
+  // IPC call to main process to read file
+  const buffer = await window.electronAPI.assets.load(conversationId, filename);
+
+  // Create blob URL from buffer
+  const blob = new Blob([buffer]);
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Deletes a specific asset file
+ */
+export async function deleteAsset(
+  conversationId: string,
+  assetPath: string
+): Promise<void> {
+  const filename = assetPath.replace("assets/", "");
+  await window.electronAPI.assets.delete(conversationId, filename);
+}
+
+/**
+ * Deletes all assets for a conversation
+ */
+export async function deleteConversationAssets(
+  conversationId: string
+): Promise<void> {
+  await window.electronAPI.assets.deleteAll(conversationId);
 }
 
 /**

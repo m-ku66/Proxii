@@ -45,6 +45,18 @@ export interface ElectronAPI {
     getConversationsPath: () => Promise<string>;
     openConversationsFolder: () => Promise<void>;
   };
+
+  // Asset management
+  assets: {
+    save: (
+      conversationId: string,
+      filename: string,
+      buffer: ArrayBuffer
+    ) => Promise<void>;
+    load: (conversationId: string, filename: string) => Promise<ArrayBuffer>;
+    delete: (conversationId: string, filename: string) => Promise<void>;
+    deleteAll: (conversationId: string) => Promise<void>;
+  };
 }
 
 // Expose the API to the renderer process securely
@@ -64,5 +76,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("app:get-conversations-path"),
     openConversationsFolder: () =>
       ipcRenderer.invoke("app:open-conversations-folder"),
+  },
+
+  assets: {
+    save: (conversationId: string, filename: string, buffer: ArrayBuffer) =>
+      ipcRenderer.invoke("assets:save", conversationId, filename, buffer),
+    load: (conversationId: string, filename: string) =>
+      ipcRenderer.invoke("assets:load", conversationId, filename),
+    delete: (conversationId: string, filename: string) =>
+      ipcRenderer.invoke("assets:delete", conversationId, filename),
+    deleteAll: (conversationId: string) =>
+      ipcRenderer.invoke("assets:delete-all", conversationId),
   },
 } satisfies ElectronAPI);

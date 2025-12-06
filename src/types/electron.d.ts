@@ -38,6 +38,17 @@ interface ElectronAPI {
     getConversationsPath: () => Promise<string>;
     openConversationsFolder: () => Promise<void>;
   };
+
+  assets: {
+    save: (
+      conversationId: string,
+      filename: string,
+      buffer: ArrayBuffer
+    ) => Promise<void>;
+    load: (conversationId: string, filename: string) => Promise<ArrayBuffer>;
+    delete: (conversationId: string, filename: string) => Promise<void>;
+    deleteAll: (conversationId: string) => Promise<void>;
+  };
 }
 
 declare global {

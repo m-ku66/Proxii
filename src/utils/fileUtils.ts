@@ -172,10 +172,17 @@ export async function encodeFileToBase64(file: File): Promise<string> {
  */
 export function generateAssetFilename(
   originalName: string,
-  messageId: string
+  messageId: string,
+  index?: number // Add index for guaranteed uniqueness
 ): string {
   const timestamp = Date.now();
   const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
+
+  // Include index if provided to prevent filename collisions
+  if (index !== undefined) {
+    return `${timestamp}_${index}_${messageId}_${sanitizedName}`;
+  }
+
   return `${timestamp}_${messageId}_${sanitizedName}`;
 }
 
@@ -194,9 +201,10 @@ export function getAssetPath(filename: string): string {
 export async function saveAsset(
   conversationId: string,
   file: File,
-  messageId: string
+  messageId: string,
+  index?: number
 ): Promise<string> {
-  const filename = generateAssetFilename(file.name, messageId);
+  const filename = generateAssetFilename(file.name, messageId, index); // Pass index
   const assetPath = getAssetPath(filename);
 
   // Convert file to buffer for IPC

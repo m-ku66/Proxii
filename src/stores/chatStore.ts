@@ -9,6 +9,68 @@ import type { LocalConversation } from "../types/electron";
 import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
 import { loadAssetAsBlob } from "@/utils/fileUtils";
 
+// ============================================================
+// CONVERSATION CONTEXT CONFIGURATION
+// TODO: Move these to settingsStore when adding context controls to UI
+// ============================================================
+
+/**
+ * Maximum number of messages to send in API context
+ * Prevents payload size errors and reduces costs
+ */
+const MAX_CONTEXT_MESSAGES = 20;
+
+/**
+ * Number of recent messages that can include images
+ * Older messages will have images stripped to reduce payload size
+ */
+const MAX_MESSAGES_WITH_IMAGES = 5;
+
+// ============================================================
+
+/**
+ * Prepares conversation history for API submission
+ * - Limits total messages to prevent payload size errors
+ * - Strips images from older messages to reduce data size
+ * - Keeps text context for continuity
+ *
+ * @param messages - Full conversation history
+ * @param maxMessages - Maximum messages to include (default: MAX_CONTEXT_MESSAGES)
+ * @param maxImagesInMessages - How many recent messages can have images (default: MAX_MESSAGES_WITH_IMAGES)
+ * @returns Filtered and processed messages ready for API
+ */
+function prepareContextForAPI(
+  messages: Message[],
+  maxMessages: number = MAX_CONTEXT_MESSAGES,
+  maxImagesInMessages: number = MAX_MESSAGES_WITH_IMAGES
+): Message[] {
+  // Step 1: Get the most recent N messages
+  const recentMessages = messages.slice(-maxMessages);
+
+  // Step 2: Strip images from older messages
+  return recentMessages.map((msg, index) => {
+    // Calculate if this message is recent enough to keep images
+    const isRecentEnoughForImages =
+      index >= recentMessages.length - maxImagesInMessages;
+
+    // If it's recent OR has no multimodal content, return as-is
+    if (isRecentEnoughForImages || !Array.isArray(msg.content)) {
+      return msg;
+    }
+
+    // Old message with multimodal content: strip images, keep text
+    const textOnlyContent = msg.content
+      .filter((block) => block.type === "text")
+      .map((block) => (block as any).text)
+      .join("\n\n");
+
+    return {
+      ...msg,
+      content: textOnlyContent || msg.content, // Fallback to original if no text found
+    };
+  });
+}
+
 // Thinking capability types
 type ThinkingCapability =
   | "always" // Always thinks, can't be toggled (DeepSeek)
@@ -413,7 +475,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       // Import file utilities
-      const { createMultimodalContent, saveAsset, getFileCategory } =
+      const { createMultimodalContent, saveAsset, loadAssetAsBlob } =
         await import("@/utils/fileUtils");
 
       // Create multimodal content from text + files (for API)
@@ -429,23 +491,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const tempMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
         messageFiles = await Promise.all(
-          files.map(async (file) => {
+          files.map(async (file, index) => {
+            console.log(`🔵 Processing file ${index}:`, file.name);
+
             // Save file to disk and get the asset path
             const assetPath = await saveAsset(
               conversationId,
               file,
-              tempMessageId
+              tempMessageId,
+              index
             );
+            console.log(`💾 Saved ${index} to:`, assetPath);
 
-            // Build the attachment metadata
+            // Load asset as blob URL for immediate display
+            const blobUrl = await loadAssetAsBlob(conversationId, assetPath);
+            console.log(`🔗 Created blob URL ${index}:`, blobUrl);
+
+            // Build the attachment metadata with both path and blob URL
             return {
               name: file.name,
               type: file.type,
               size: file.size,
-              url: assetPath, // Store the relative path instead of blob URL
+              url: assetPath, // Path stored in JSON
+              blobUrl: blobUrl, // Blob URL for UI display
             };
           })
         );
+        console.log("📦 Final messageFiles:", messageFiles);
       }
 
       // Create the user message with multimodal content AND file metadata
@@ -485,10 +557,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (!conversation) throw new Error("Conversation not found");
 
       // Prepare messages for API - normalize all content to multimodal format
+
+      // 📊 Prepare conversation context (limit messages + strip old images)
+      const processedMessages = prepareContextForAPI(conversation.messages);
+      // 🐛 DEBUG: Log context stats
+      console.log(
+        `📊 Context: ${processedMessages.length}/${conversation.messages.length} messages, ` +
+          `${processedMessages.filter((m) => Array.isArray(m.content)).length} with images`
+      );
+
       const apiMessages: Array<{
         role: "system" | "user" | "assistant";
         content: MessageContent;
-      }> = conversation.messages.map((msg) => ({
+      }> = processedMessages.map((msg) => ({
         role: msg.role,
         content: normalizeContentForAPI(msg.content),
       }));
@@ -1193,7 +1274,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     conversationPersistence.markDirty(conversationId);
   },
 
-  // ✨ NEW: Persistence methods
+  // Persistence methods
   setConversationsFromDisk: async (conversations) => {
     // Transform asset paths to blob URLs for each message with files
     const transformedConversations = await Promise.all(
@@ -1207,7 +1288,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const transformedFiles = await Promise.all(
               msg.files.map(async (file) => {
                 const blobUrl = await loadAssetAsBlob(conv.id, file.url);
-                return { ...file, url: blobUrl };
+                return { ...file, blobUrl: blobUrl }; // Assign to blobUrl, not url
               })
             );
 

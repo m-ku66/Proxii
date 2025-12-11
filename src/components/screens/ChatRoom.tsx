@@ -373,7 +373,7 @@ export const ChatRoom = () => {
                                                                     className="relative rounded overflow-hidden border border-white/20"
                                                                 >
                                                                     <img
-                                                                        src={file.url}
+                                                                        src={file.blobUrl || file.url} // Try blobUrl first, fallback to url
                                                                         alt={file.name}
                                                                         className="w-full h-32 object-cover"
                                                                     />

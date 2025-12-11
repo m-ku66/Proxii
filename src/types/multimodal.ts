@@ -108,7 +108,8 @@ export interface MessageFileAttachment {
   name: string;
   type: string; // MIME type
   size: number;
-  url: string; // Data URI for display
+  url: string; // Asset path (persisted to disk)
+  blobUrl?: string; // Blob URL (in-memory only, for display)
 }
 
 /**

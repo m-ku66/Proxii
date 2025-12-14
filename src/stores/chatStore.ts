@@ -180,6 +180,7 @@ interface ChatStore {
   activeConversationId: string | null;
   isLoading: boolean;
   error: string | null;
+  currentAbortController: AbortController | null;
 
   setActiveConversation: (id: string) => void;
   createNewChat: (title: string, firstMessage?: Message) => void;
@@ -250,6 +251,7 @@ interface ChatStore {
     }
   ) => Promise<void>;
   deleteMessage: (conversationId: string, messageId: string) => Promise<void>;
+  stopGeneration: (conversationId: string) => void;
   // Persistence methods
   setConversationsFromDisk: (conversations: Conversation[]) => void;
   exportConversation: (
@@ -324,6 +326,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeConversationId: null,
   isLoading: false,
   error: null,
+  currentAbortController: null,
 
   setActiveConversation: (id) => {
     set({ activeConversationId: id });
@@ -468,6 +471,44 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       conversationPersistence
         .saveConversationImmediately(conversation as LocalConversation)
         .catch((error) => console.error("Failed to save AI response:", error));
+    }
+  },
+
+  // Stop the current generation
+  stopGeneration: (conversationId) => {
+    const { currentAbortController } = get();
+
+    if (currentAbortController) {
+      console.log("🛑 Stopping generation...");
+
+      // Abort the fetch request
+      currentAbortController.abort();
+
+      // Find the streaming message and mark it as stopped
+      set((state) => ({
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map((msg) =>
+                  msg.isStreaming
+                    ? {
+                        ...msg,
+                        isStreaming: false,
+                        content: msg.content + "\n\n[Generation stopped]",
+                      }
+                    : msg
+                ),
+                updatedAt: new Date(),
+              }
+            : conv
+        ),
+        isLoading: false,
+        currentAbortController: null,
+      }));
+
+      // Mark as dirty for auto-save
+      conversationPersistence.markDirty(conversationId);
     }
   },
 
@@ -659,58 +700,70 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
 
+      // Create AbortController for this request
+      const abortController = new AbortController();
+      set({ currentAbortController: abortController });
+
       // Stream the response
-      await sendChatCompletionStream(requestParams, {
-        onContent: (chunk) => {
-          get().updateMessageContent(conversationId, assistantMessageId, chunk);
-        },
-        onThinking: (thinking) => {
-          get().updateMessageThinking(
-            conversationId,
-            assistantMessageId,
-            thinking
-          );
-        },
-        onComplete: (usage) => {
-          const inputCost = calculateCost(usage.prompt_tokens, model, false);
-          const outputCost = calculateCost(
-            usage.completion_tokens,
-            model,
-            true
-          );
-          const totalCost = inputCost + outputCost;
+      await sendChatCompletionStream(
+        requestParams,
+        {
+          onContent: (chunk) => {
+            get().updateMessageContent(
+              conversationId,
+              assistantMessageId,
+              chunk
+            );
+          },
+          onThinking: (thinking) => {
+            get().updateMessageThinking(
+              conversationId,
+              assistantMessageId,
+              thinking
+            );
+          },
+          onComplete: (usage) => {
+            const inputCost = calculateCost(usage.prompt_tokens, model, false);
+            const outputCost = calculateCost(
+              usage.completion_tokens,
+              model,
+              true
+            );
+            const totalCost = inputCost + outputCost;
 
-          get().finalizeMessage(
-            conversationId,
-            assistantMessageId,
-            usage.completion_tokens,
-            totalCost
-          );
-          set({ isLoading: false });
+            get().finalizeMessage(
+              conversationId,
+              assistantMessageId,
+              usage.completion_tokens,
+              totalCost
+            );
+            set({ isLoading: false });
 
-          // Mark as dirty after AI response completes
-          conversationPersistence.markDirty(conversationId);
-        },
-        onError: (error) => {
-          set({ isLoading: false, error: error.message });
-          console.error("Streaming error:", error);
+            // Mark as dirty after AI response completes
+            conversationPersistence.markDirty(conversationId);
+          },
+          onError: (error) => {
+            set({ isLoading: false, error: error.message });
+            console.error("Streaming error:", error);
 
-          // Remove failed streaming message
-          set((state) => ({
-            conversations: state.conversations.map((conv) =>
-              conv.id === conversationId
-                ? {
-                    ...conv,
-                    messages: conv.messages.filter(
-                      (msg) => msg.id !== assistantMessageId
-                    ),
-                    updatedAt: new Date(),
-                  }
-                : conv
-            ),
-          }));
+            // Remove failed streaming message
+            set((state) => ({
+              conversations: state.conversations.map((conv) =>
+                conv.id === conversationId
+                  ? {
+                      ...conv,
+                      messages: conv.messages.filter(
+                        (msg) => msg.id !== assistantMessageId
+                      ),
+                      updatedAt: new Date(),
+                    }
+                  : conv
+              ),
+            }));
+          },
         },
-      });
+        abortController.signal
+      );
     } catch (error) {
       console.error("Failed to send message:", error);
       set({
@@ -990,59 +1043,74 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
 
+      const abortController = new AbortController();
+      set({ currentAbortController: abortController });
+
       // Stream the response
-      await sendChatCompletionStream(requestParams, {
-        onContent: (chunk) => {
-          get().updateMessageContent(conversationId, assistantMessageId, chunk);
-        },
-        onThinking: (thinking) => {
-          get().updateMessageThinking(
-            conversationId,
-            assistantMessageId,
-            thinking
-          );
-        },
-        onComplete: (usage) => {
-          const inputCost = calculateCost(
-            usage.prompt_tokens,
-            modelToUse,
-            false
-          );
-          const outputCost = calculateCost(
-            usage.completion_tokens,
-            modelToUse,
-            true
-          );
-          const totalCost = inputCost + outputCost;
+      await sendChatCompletionStream(
+        requestParams,
+        {
+          onContent: (chunk) => {
+            get().updateMessageContent(
+              conversationId,
+              assistantMessageId,
+              chunk
+            );
+          },
+          onThinking: (thinking) => {
+            get().updateMessageThinking(
+              conversationId,
+              assistantMessageId,
+              thinking
+            );
+          },
+          onComplete: (usage) => {
+            const inputCost = calculateCost(
+              usage.prompt_tokens,
+              modelToUse,
+              false
+            );
+            const outputCost = calculateCost(
+              usage.completion_tokens,
+              modelToUse,
+              true
+            );
+            const totalCost = inputCost + outputCost;
 
-          get().finalizeMessage(
-            conversationId,
-            assistantMessageId,
-            usage.completion_tokens,
-            totalCost
-          );
-          set({ isLoading: false });
-        },
-        onError: (error) => {
-          set({ isLoading: false, error: error.message });
-          console.error("Regeneration error:", error);
+            get().finalizeMessage(
+              conversationId,
+              assistantMessageId,
+              usage.completion_tokens,
+              totalCost
+            );
+            set({ isLoading: false, currentAbortController: null });
+          },
+          onError: (error) => {
+            set({
+              isLoading: false,
+              error: error.message,
+              currentAbortController: null,
+            });
+            console.error("Regeneration error:", error);
 
-          // Remove the failed streaming message
-          set((state) => ({
-            conversations: state.conversations.map((conv) =>
-              conv.id === conversationId
-                ? {
-                    ...conv,
-                    messages: conv.messages.filter(
-                      (msg) => msg.id !== assistantMessageId
-                    ),
-                    updatedAt: new Date(),
-                  }
-                : conv
-            ),
-          }));
+            // Remove the failed streaming message
+            set((state) => ({
+              conversations: state.conversations.map((conv) =>
+                conv.id === conversationId
+                  ? {
+                      ...conv,
+                      messages: conv.messages.filter(
+                        (msg) => msg.id !== assistantMessageId
+                      ),
+                      updatedAt: new Date(),
+                    }
+                  : conv
+              ),
+            }));
+          },
         },
-      });
+        abortController.signal
+      );
     } catch (error) {
       console.error("Failed to regenerate message:", error);
       set({
@@ -1187,63 +1255,74 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           max_tokens: options?.max_tokens ?? 4000,
         };
 
+        const abortController = new AbortController();
+        set({ currentAbortController: abortController });
+
         // Stream the response (no thinking for edited messages by default)
-        await sendChatCompletionStream(requestParams, {
-          onContent: (chunk) => {
-            get().updateMessageContent(
-              conversationId,
-              assistantMessageId,
-              chunk
-            );
-          },
-          onThinking: (thinking) => {
-            get().updateMessageThinking(
-              conversationId,
-              assistantMessageId,
-              thinking
-            );
-          },
-          onComplete: (usage) => {
-            const inputCost = calculateCost(
-              usage.prompt_tokens,
-              modelToUse!, // should not be null here
-              false
-            );
-            const outputCost = calculateCost(
-              usage.completion_tokens,
-              modelToUse!, // should not be null here
-              true
-            );
-            const totalCost = inputCost + outputCost;
+        await sendChatCompletionStream(
+          requestParams,
+          {
+            onContent: (chunk) => {
+              get().updateMessageContent(
+                conversationId,
+                assistantMessageId,
+                chunk
+              );
+            },
+            onThinking: (thinking) => {
+              get().updateMessageThinking(
+                conversationId,
+                assistantMessageId,
+                thinking
+              );
+            },
+            onComplete: (usage) => {
+              const inputCost = calculateCost(
+                usage.prompt_tokens,
+                modelToUse!,
+                false
+              );
+              const outputCost = calculateCost(
+                usage.completion_tokens,
+                modelToUse!,
+                true
+              );
+              const totalCost = inputCost + outputCost;
 
-            get().finalizeMessage(
-              conversationId,
-              assistantMessageId,
-              usage.completion_tokens,
-              totalCost
-            );
-            set({ isLoading: false });
-          },
-          onError: (error) => {
-            set({ isLoading: false, error: error.message });
-            console.error("Edit resend error:", error);
+              get().finalizeMessage(
+                conversationId,
+                assistantMessageId,
+                usage.completion_tokens,
+                totalCost
+              );
+              set({ isLoading: false, currentAbortController: null }); // ✨ Add this!
+            },
+            onError: (error) => {
+              set({
+                isLoading: false,
+                error: error.message,
+                currentAbortController: null,
+              }); // ✨ Add this!
+              console.error("Edit resend error:", error);
 
-            // Remove failed streaming message
-            set((state) => ({
-              conversations: state.conversations.map((conv) =>
-                conv.id === conversationId
-                  ? {
-                      ...conv,
-                      messages: conv.messages.filter(
-                        (msg) => msg.id !== assistantMessageId
-                      ),
-                      updatedAt: new Date(),
-                    }
-                  : conv
-              ),
-            }));
+              // Remove failed streaming message
+              set((state) => ({
+                conversations: state.conversations.map((conv) =>
+                  conv.id === conversationId
+                    ? {
+                        ...conv,
+                        messages: conv.messages.filter(
+                          (msg) => msg.id !== assistantMessageId
+                        ),
+                        updatedAt: new Date(),
+                      }
+                    : conv
+                ),
+              }));
+            },
           },
-        });
+          abortController.signal
+        );
       } catch (error) {
         console.error("Failed to resend edited message:", error);
         set({

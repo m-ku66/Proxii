@@ -131,7 +131,8 @@ export const ChatRoom = () => {
         editMessage,
         deleteMessage,
         exportConversation,
-        renameConversation
+        renameConversation,
+        stopGeneration,
     } = useChatStore();
 
     const activeConversation = conversations.find(
@@ -281,6 +282,12 @@ export const ChatRoom = () => {
         if (confirm('Are you sure you want to delete this message?')) {
             deleteMessage(activeConversationId, messageId);
         }
+    };
+
+    const handleStop = (messageId: string) => {
+        if (!activeConversationId) return;
+        stopGeneration(activeConversationId);
+        console.log("🛑 Stopped generation for message:", messageId);
     };
 
     const handleEditSave = async (newContent: string) => {
@@ -458,37 +465,37 @@ export const ChatRoom = () => {
                                         )}
                                     </div>
                                     {/* Message Actions - positioned below the message */}
-                                    {!message.isStreaming && (
-                                        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <MessageActions
-                                                messageId={message.id}
-                                                role={message.role}
-                                                onResend={handleResend}
-                                                onEdit={(messageId) => {
-                                                    // Extract text from content
-                                                    const textContent = typeof message.content === 'string'
-                                                        ? message.content
-                                                        : message.content
-                                                            .filter(block => block.type === 'text')
-                                                            .map(block => (block as any).text)
-                                                            .join('\n\n');
-                                                    handleEdit(messageId, textContent, message.role);
-                                                }}
-                                                onRegenerate={handleRegenerate}
-                                                onEditAI={(messageId) => {
-                                                    // Extract text from content
-                                                    const textContent = typeof message.content === 'string'
-                                                        ? message.content
-                                                        : message.content
-                                                            .filter(block => block.type === 'text')
-                                                            .map(block => (block as any).text)
-                                                            .join('\n\n');
-                                                    handleEdit(messageId, textContent, message.role);
-                                                }}
-                                                onDelete={handleDelete}
-                                            />
-                                        </div>
-                                    )}
+                                    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <MessageActions
+                                            messageId={message.id}
+                                            role={message.role}
+                                            isStreaming={message.isStreaming}
+                                            onResend={handleResend}
+                                            onEdit={(messageId) => {
+                                                // Extract text from content
+                                                const textContent = typeof message.content === 'string'
+                                                    ? message.content
+                                                    : message.content
+                                                        .filter(block => block.type === 'text')
+                                                        .map(block => (block as any).text)
+                                                        .join('\n\n');
+                                                handleEdit(messageId, textContent, message.role);
+                                            }}
+                                            onRegenerate={handleRegenerate}
+                                            onEditAI={(messageId) => {
+                                                // Extract text from content
+                                                const textContent = typeof message.content === 'string'
+                                                    ? message.content
+                                                    : message.content
+                                                        .filter(block => block.type === 'text')
+                                                        .map(block => (block as any).text)
+                                                        .join('\n\n');
+                                                handleEdit(messageId, textContent, message.role);
+                                            }}
+                                            onDelete={handleDelete}
+                                            onStop={handleStop}
+                                        />
+                                    </div>
                                 </div>
                             </motion.div>
                         ))}

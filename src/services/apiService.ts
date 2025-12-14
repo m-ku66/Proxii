@@ -135,7 +135,8 @@ export async function sendChatCompletion(
  */
 export async function sendChatCompletionStream(
   request: ChatCompletionRequest,
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal // Abort signal parameter
 ): Promise<void> {
   const apiKey = useSettingsStore.getState().openRouterApiKey;
 
@@ -160,16 +161,16 @@ export async function sendChatCompletionStream(
         },
         body: JSON.stringify({
           ...request,
-          stream: true, // Enable streaming!
+          stream: true,
           route: "fallback",
         }),
+        signal, // Pass the abort signal to fetch
       }
     );
 
     if (!response.ok) {
       const errorData: ChatCompletionError = await response.json();
 
-      // 🔍 DEBUG: Log full error details
       console.error("❌ OpenRouter API Error:", {
         status: response.status,
         statusText: response.statusText,
@@ -217,7 +218,7 @@ export async function sendChatCompletionStream(
 
         // SSE format: "data: {json}"
         if (trimmed.startsWith("data: ")) {
-          const data = trimmed.slice(6); // Remove "data: " prefix
+          const data = trimmed.slice(6);
 
           // Check for stream end
           if (data === "[DONE]") {
@@ -231,12 +232,10 @@ export async function sendChatCompletionStream(
             const delta = chunk.choices[0]?.delta;
 
             if (delta?.content) {
-              // Send content chunks as-is, don't sanitize individual chunks!
               callbacks.onContent?.(delta.content);
             }
 
             if (delta?.reasoning) {
-              // Some models send thinking/reasoning separately
               callbacks.onThinking?.(delta.reasoning);
             }
 
@@ -246,12 +245,18 @@ export async function sendChatCompletionStream(
             }
           } catch (parseError) {
             console.error("Failed to parse SSE chunk:", data, parseError);
-            // Continue processing other chunks even if one fails
           }
         }
       }
     }
   } catch (error) {
+    // Handle abort gracefully
+    if (error instanceof Error && error.name === "AbortError") {
+      console.log("🛑 Stream aborted by user");
+      // Don't call onError for user-initiated stops
+      return;
+    }
+
     const err = error instanceof Error ? error : new Error("Unknown error");
     callbacks.onError?.(err);
     throw err;

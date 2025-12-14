@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Slider } from '../ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search } from 'lucide-react';
 import ModelInfoTooltip from '../ModelInfoTooltip';
@@ -27,7 +28,11 @@ export const Settings = () => {
         openRouterApiKey,
         setOpenRouterApiKey,
         systemPrompt,
-        setSystemPrompt
+        setSystemPrompt,
+        maxContextMessages,
+        maxMessagesWithImages,
+        setMaxContextMessages,
+        setMaxMessagesWithImages,
     } = useSettingsStore();
 
     const [apiKey, setApiKey] = useState(openRouterApiKey || '');
@@ -396,6 +401,7 @@ export const Settings = () => {
 
                 {/* Prompting Tab */}
                 <TabsContent value="prompting" className="space-y-6">
+                    {/* Global System Prompt */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Global System Prompt</CardTitle>
@@ -414,6 +420,65 @@ export const Settings = () => {
                                 />
                                 <p className="text-xs text-muted-foreground">
                                     {systemPrompt.length} characters
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Context Management */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Context Management</CardTitle>
+                            <CardDescription>
+                                Control how much conversation history is sent to the AI
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Max Context Messages */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="max-context" className="text-sm font-medium">
+                                        Maximum Messages in Context
+                                    </Label>
+                                    <span className="text-sm font-mono text-muted-foreground">
+                                        {maxContextMessages}
+                                    </span>
+                                </div>
+                                <Slider
+                                    id="max-context"
+                                    min={5}
+                                    max={50}
+                                    step={1}
+                                    value={[maxContextMessages]}
+                                    onValueChange={([value]) => setMaxContextMessages(value)}
+                                    className="w-full"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Limits how many messages are sent to the API. Lower values reduce costs and prevent payload size errors, but may lose older context.
+                                </p>
+                            </div>
+
+                            {/* Max Messages With Images */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="max-images" className="text-sm font-medium">
+                                        Messages That Can Include Images
+                                    </Label>
+                                    <span className="text-sm font-mono text-muted-foreground">
+                                        {maxMessagesWithImages}
+                                    </span>
+                                </div>
+                                <Slider
+                                    id="max-images"
+                                    min={1}
+                                    max={10}
+                                    step={1}
+                                    value={[maxMessagesWithImages]}
+                                    onValueChange={([value]) => setMaxMessagesWithImages(value)}
+                                    className="w-full"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Only the most recent messages will include images. Older messages keep their text but images are stripped to reduce payload size.
                                 </p>
                             </div>
                         </CardContent>

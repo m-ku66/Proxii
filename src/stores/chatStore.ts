@@ -9,25 +9,6 @@ import type { LocalConversation } from "../types/electron";
 import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
 import { loadAssetAsBlob } from "@/utils/fileUtils";
 
-// ============================================================
-// CONVERSATION CONTEXT CONFIGURATION
-// TODO: Move these to settingsStore when adding context controls to UI
-// ============================================================
-
-/**
- * Maximum number of messages to send in API context
- * Prevents payload size errors and reduces costs
- */
-const MAX_CONTEXT_MESSAGES = 20;
-
-/**
- * Number of recent messages that can include images
- * Older messages will have images stripped to reduce payload size
- */
-const MAX_MESSAGES_WITH_IMAGES = 5;
-
-// ============================================================
-
 /**
  * Prepares conversation history for API submission
  * - Limits total messages to prevent payload size errors
@@ -35,17 +16,44 @@ const MAX_MESSAGES_WITH_IMAGES = 5;
  * - Keeps text context for continuity
  *
  * @param messages - Full conversation history
- * @param maxMessages - Maximum messages to include (default: MAX_CONTEXT_MESSAGES)
- * @param maxImagesInMessages - How many recent messages can have images (default: MAX_MESSAGES_WITH_IMAGES)
+ * @param maxMessages - Maximum messages to include
+ * @param maxImagesInMessages - How many recent messages can have images
  * @returns Filtered and processed messages ready for API
  */
 function prepareContextForAPI(
   messages: Message[],
-  maxMessages: number = MAX_CONTEXT_MESSAGES,
-  maxImagesInMessages: number = MAX_MESSAGES_WITH_IMAGES
+  maxMessages: number,
+  maxImagesInMessages: number
 ): Message[] {
+  // 🐛 DEBUG: Log what we're receiving
+  console.log("🔍 prepareContextForAPI input:", {
+    totalMessages: messages.length,
+    maxMessages,
+    maxImagesInMessages,
+    messagesWithFiles: messages.filter((m) => m.files && m.files.length > 0)
+      .length,
+    messagesWithImageContent: messages.filter(
+      (m) =>
+        Array.isArray(m.content) &&
+        m.content.some((b) => b.type === "image_url")
+    ).length,
+  });
+
   // Step 1: Get the most recent N messages
   const recentMessages = messages.slice(-maxMessages);
+
+  // 🐛 DEBUG: Log recent messages structure
+  console.log(
+    "🔍 Recent messages structure:",
+    recentMessages.map((m, i) => ({
+      index: i,
+      hasFiles: !!(m.files && m.files.length > 0),
+      contentType: Array.isArray(m.content) ? "array" : "string",
+      contentHasImages:
+        Array.isArray(m.content) &&
+        m.content.some((b) => b.type === "image_url"),
+    }))
+  );
 
   // Step 2: Strip images from older messages
   return recentMessages.map((msg, index) => {
@@ -558,14 +566,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       // Prepare messages for API - normalize all content to multimodal format
 
+      // Get context settings from settingsStore
+      const { maxContextMessages, maxMessagesWithImages } =
+        useSettingsStore.getState();
+
       // 📊 Prepare conversation context (limit messages + strip old images)
-      const processedMessages = prepareContextForAPI(conversation.messages);
+      const processedMessages = prepareContextForAPI(
+        conversation.messages,
+        maxContextMessages,
+        maxMessagesWithImages
+      );
       // 🐛 DEBUG: Log context stats
+      const messagesWithActualImages = processedMessages.filter(
+        (m) =>
+          Array.isArray(m.content) &&
+          m.content.some((block) => block.type === "image_url")
+      ).length;
+
       console.log(
         `📊 Context: ${processedMessages.length}/${conversation.messages.length} messages, ` +
-          `${processedMessages.filter((m) => Array.isArray(m.content)).length} with images`
+          `${messagesWithActualImages} with images`
       );
-
       const apiMessages: Array<{
         role: "system" | "user" | "assistant";
         content: MessageContent;

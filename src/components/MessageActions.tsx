@@ -27,7 +27,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     onStop,
 }) => {
     // 🐛 DEBUG: Log what we're receiving
-    console.log('MessageActions:', { messageId, role, isStreaming });
+    // console.log('MessageActions:', { messageId, role, isStreaming });
 
     if (role === 'user') {
         return (

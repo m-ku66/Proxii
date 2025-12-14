@@ -13,7 +13,7 @@ import {
   MAX_FILES_PER_MESSAGE,
   AudioFormat,
   AttachedFile,
-  // MessageFileAttachment,
+  MessageFileAttachment,
 } from "@/types/multimodal";
 
 import { compressImage } from "./imageCompression";
@@ -138,35 +138,6 @@ export async function encodeFileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Convert File objects to MessageFileAttachment for storage
- * Extracts only the display metadata (no File object or base64 data)
- */
-// export function createMessageFileAttachments(
-//   files: File[]
-// ): MessageFileAttachment[] {
-//   return files.map((file) => {
-//     const category = getFileCategory(file.type);
-//     let url = "";
-
-//     // For images, create a data URI for display
-//     if (category === "image") {
-//       try {
-//         url = createImagePreview(file);
-//       } catch (error) {
-//         console.error("Failed to create image preview:", error);
-//       }
-//     }
-
-//     return {
-//       name: file.name,
-//       type: file.type,
-//       size: file.size,
-//       url, // Data URI for images, empty for others
-//     };
-//   });
-// }
-
-/**
  * Generates a unique filename for an asset
  * Format: {timestamp}_{messageId}_{originalName}
  */
@@ -255,6 +226,37 @@ export async function deleteConversationAssets(
 }
 
 /**
+ * Converts stored MessageFileAttachments back into File objects
+ * Used when resending messages with file attachments
+ */
+export async function restoreFilesFromAttachments(
+  conversationId: string,
+  attachments: MessageFileAttachment[]
+): Promise<File[]> {
+  return Promise.all(
+    attachments.map(async (attachment) => {
+      // Load the asset from disk
+      const blobUrl = await loadAssetAsBlob(conversationId, attachment.url);
+
+      // Fetch the blob from the blob URL
+      const response = await fetch(blobUrl);
+      const blob = await response.blob();
+
+      // Convert blob to File object
+      const file = new File([blob], attachment.name, {
+        type: attachment.type,
+        lastModified: Date.now(),
+      });
+
+      // Clean up the blob URL
+      URL.revokeObjectURL(blobUrl);
+
+      return file;
+    })
+  );
+}
+
+/**
  * Get audio format from MIME type
  */
 function getAudioFormatFromMimeType(mimeType: string): AudioFormat {
@@ -264,7 +266,7 @@ function getAudioFormatFromMimeType(mimeType: string): AudioFormat {
     "audio/mpeg": "mp3",
     "audio/aiff": "aiff",
     "audio/aac": "aac",
-    "audio/ogg": "ogg",
+    // "audio/ogg": "ogg", // ogg coulf contain various codecs. Openrouter supports ogg vorbis only
     "audio/flac": "flac",
     "audio/m4a": "m4a",
   };

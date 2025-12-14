@@ -850,7 +850,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   clearError: () => set({ error: null }),
 
-  // Resend a user message (resubmit the exact same content)
+  // Resend a user message (resubmit with original files if they exist)
   resendMessage: async (conversationId, messageId, options) => {
     const state = get();
     const conversation = state.conversations.find(
@@ -892,21 +892,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       ),
     }));
 
-    //  Mark as dirty after truncating conversation
+    // Mark as dirty after truncating conversation
     conversationPersistence.markDirty(conversationId);
 
-    // Extract text from the message content (ignore any files for resend)
+    // Extract text content from the message
     const textContent = extractTextFromContent(message.content);
 
-    // Now directly call sendMessage with the extracted text (no files on resend)
     try {
+      // 🆕 Restore files if the message had attachments
+      let filesToResend: File[] | undefined;
+      if (message.files && message.files.length > 0) {
+        const { restoreFilesFromAttachments } = await import(
+          "@/utils/fileUtils"
+        );
+        filesToResend = await restoreFilesFromAttachments(
+          conversationId,
+          message.files
+        );
+        console.log(`📎 Restored ${filesToResend.length} file(s) for resend`);
+      }
+
+      // Call sendMessage with both text AND files
       await get().sendMessage(
         conversationId,
-        textContent, // ✅ Pass text, not full MessageContent
+        textContent,
         modelToUse,
         undefined,
-        options
-        // Note: No files parameter - resend is text only
+        options,
+        filesToResend // ✅ Now includes files!
       );
     } catch (error) {
       console.error("Failed to resend message:", error);

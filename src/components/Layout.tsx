@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useUIStore } from '../stores/uiStore';
 import { CustomSidebar } from './CustomSidebar';
 import { Home } from './screens/Home';
@@ -8,7 +9,20 @@ import { Settings } from './screens/Settings';
 import { Toaster } from './ui/sonner';
 
 export const Layout = () => {
-    const { activeScreen } = useUIStore();
+    const { activeScreen, theme } = useUIStore();
+
+    // 🎨 Sync theme with HTML element
+    useEffect(() => {
+        const root = document.documentElement;
+        
+        if (theme === 'dark') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+        
+        console.log(`🎨 Theme applied: ${theme}`);
+    }, [theme]);
 
     const renderScreen = () => {
         switch (activeScreen) {

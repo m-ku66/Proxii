@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { RotateCcw, Edit2, Trash2, RefreshCw, StopCircle } from 'lucide-react';
+import { RotateCcw, Edit2, Trash2, RefreshCw, StopCircle, Copy } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface MessageActionsProps {
@@ -13,6 +13,7 @@ interface MessageActionsProps {
     onEditAI?: (messageId: string) => void;
     onDelete?: (messageId: string) => void;
     onStop?: (messageId: string) => void;
+    onCopy?: (messageId: string) => void;
 }
 
 export const MessageActions: React.FC<MessageActionsProps> = ({
@@ -25,6 +26,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     onEditAI,
     onDelete,
     onStop,
+    onCopy,
 }) => {
     // 🐛 DEBUG: Log what we're receiving
     // console.log('MessageActions:', { messageId, role, isStreaming });
@@ -64,6 +66,23 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                         </TooltipTrigger>
                         <TooltipContent side="top">
                             <p>Edit</p>
+                        </TooltipContent>
+                    </Tooltip>
+
+                    {/* Copy */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => onCopy?.(messageId)}
+                            >
+                                <Copy className="h-3 w-3" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            <p>Copy</p>
                         </TooltipContent>
                     </Tooltip>
 
@@ -145,6 +164,25 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                         </TooltipTrigger>
                         <TooltipContent side="top">
                             <p>Edit AI Response</p>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+
+                {/* Copy - hide when streaming */}
+                {!isStreaming && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                                onClick={() => onCopy?.(messageId)}
+                            >
+                                <Copy className="h-3 w-3" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            <p>Copy</p>
                         </TooltipContent>
                     </Tooltip>
                 )}

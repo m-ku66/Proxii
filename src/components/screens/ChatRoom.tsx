@@ -11,8 +11,13 @@ import {
 import { ChevronDown, Star, Edit, Download, AlertCircle, Brain, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { MessageActions } from '@/components/MessageActions';
 import { EditMessageDialog } from '@/components/EditMessageDialog';
+import { CodeBlock } from '@/components/message/CodeBlock';
 import { toast } from 'sonner';
 import { FileText, Music, Film } from 'lucide-react';
 import { formatFileSize } from '@/utils/fileUtils';
@@ -53,18 +58,15 @@ const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
                         <div className="p-3 pt-0 border-t border-neutral-500/20">
                             <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground">
                                 <ReactMarkdown
+                                    remarkPlugins={[remarkMath, remarkGfm]}
+                                    rehypePlugins={[rehypeKatex]}
                                     components={{
-                                        code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
-                                            inline ? (
-                                                <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
-                                                    {children}
-                                                </code>
-                                            ) : (
-                                                <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
-                                                    {children}
-                                                </code>
-                                            )
-                                        ),
+                                        code: ({ inline, className, children, ...props }: any) => {
+                                            const match = /language-(\w+)/.exec(className || '');
+                                            const language = match ? match[1] : undefined;
+                                            const codeString = String(children).replace(/\n$/, '');
+                                            return <CodeBlock inline={inline} language={language}>{codeString}</CodeBlock>;
+                                        },
                                         p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
                                     }}
                                 >
@@ -300,6 +302,21 @@ export const ChatRoom = () => {
         setEditDialog({ isOpen: false, messageId: '', content: '', role: 'user' });
     };
 
+    const handleCopy = async (messageId: string) => {
+        const message = activeConversation?.messages.find(msg => msg.id === messageId);
+        if (!message) return;
+
+        const textContent = typeof message.content === 'string'
+            ? message.content
+            : message.content
+                .filter(block => block.type === 'text')
+                .map(block => (block as any).text)
+                .join('\n\n');
+
+        await navigator.clipboard.writeText(textContent);
+        toast.success('Copied to clipboard');
+    };
+
     return (
         <div className="flex h-full flex-col">
             {/* Top bar */}
@@ -424,24 +441,64 @@ export const ChatRoom = () => {
                                             </div>
                                         )}
 
-                                        {/* Message content (existing code) */}
+                                        {/* Message content */}
                                         <div className="prose prose-sm dark:prose-invert max-w-none break-words">
                                             <ReactMarkdown
+                                                remarkPlugins={[remarkMath, remarkGfm]}
+                                                rehypePlugins={[rehypeKatex]}
                                                 components={{
-                                                    // Inline code
-                                                    code: ({ node, inline, className, children, ...props }: { inline: boolean } & any) => (
-                                                        inline ? (
-                                                            <code className="bg-background/50 px-1 py-0.5 rounded text-sm font-mono" {...props}>
-                                                                {children}
-                                                            </code>
-                                                        ) : (
-                                                            <code className="block bg-background/50 p-2 rounded font-mono text-sm overflow-x-auto" {...props}>
-                                                                {children}
-                                                            </code>
-                                                        )
+                                                    // Code blocks with syntax highlighting
+                                                    code: ({ inline, className, children, ...props }: any) => {
+                                                        const match = /language-(\w+)/.exec(className || '');
+                                                        const language = match ? match[1] : undefined;
+                                                        const codeString = String(children).replace(/\n$/, '');
+                                                        return <CodeBlock inline={inline} language={language}>{codeString}</CodeBlock>;
+                                                    },
+                                                    // Headings with better spacing
+                                                    h1: ({ children }) => <h1 className="text-2xl font-bold mt-6 mb-4">{children}</h1>,
+                                                    h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3">{children}</h2>,
+                                                    h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>,
+                                                    h4: ({ children }) => <h4 className="text-base font-semibold mt-3 mb-2">{children}</h4>,
+                                                    // Paragraphs
+                                                    p: ({ children }) => <p className="mb-4 last:mb-0 whitespace-pre-wrap leading-relaxed">{children}</p>,
+                                                    // Lists with proper spacing
+                                                    ul: ({ children }) => <ul className="list-disc list-outside ml-6 mb-4 space-y-2">{children}</ul>,
+                                                    ol: ({ children }) => <ol className="list-decimal list-outside ml-6 mb-4 space-y-2">{children}</ol>,
+                                                    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                                                    // Blockquotes
+                                                    blockquote: ({ children }) => (
+                                                        <blockquote className="border-l-4 border-primary/30 pl-4 italic my-4 text-muted-foreground">
+                                                            {children}
+                                                        </blockquote>
                                                     ),
-                                                    // Preserve line breaks and spacing
-                                                    p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
+                                                    // Tables
+                                                    table: ({ children }) => (
+                                                        <div className="my-4 overflow-x-auto">
+                                                            <table className="min-w-full divide-y divide-border">{children}</table>
+                                                        </div>
+                                                    ),
+                                                    thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
+                                                    tbody: ({ children }) => <tbody className="divide-y divide-border">{children}</tbody>,
+                                                    tr: ({ children }) => <tr>{children}</tr>,
+                                                    th: ({ children }) => (
+                                                        <th className="px-4 py-2 text-left text-sm font-semibold">{children}</th>
+                                                    ),
+                                                    td: ({ children }) => <td className="px-4 py-2 text-sm">{children}</td>,
+                                                    // Links
+                                                    a: ({ href, children }) => (
+                                                        <a
+                                                            href={href}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-primary hover:underline font-medium"
+                                                        >
+                                                            {children}
+                                                        </a>
+                                                    ),
+                                                    // Horizontal rule
+                                                    hr: () => <hr className="my-6 border-border" />,
+                                                    // Strikethrough (from remark-gfm)
+                                                    del: ({ children }) => <del className="line-through opacity-70">{children}</del>,
                                                 }}
                                             >
                                                 {/* Extract text for display */}
@@ -494,6 +551,7 @@ export const ChatRoom = () => {
                                             }}
                                             onDelete={handleDelete}
                                             onStop={handleStop}
+                                            onCopy={handleCopy}
                                         />
                                     </div>
                                 </div>

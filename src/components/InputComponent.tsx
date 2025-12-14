@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useModelStore } from '@/stores/modelStore';
+import { useUIStore } from '@/stores/uiStore';
 import { supportsThinking } from '@/stores/chatStore';
-import { Textarea } from './ui/textarea';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
+import '@uiw/react-markdown-preview/markdown.css';
 import { Button } from './ui/button';
 import { ButtonGroup } from './ui/button-group';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -34,6 +37,7 @@ interface InputComponentProps {
 
 export const InputComponent = ({ onSubmit }: InputComponentProps) => {
     const { getUserModels, selectedModelId, setSelectedModel } = useModelStore();
+    const { theme } = useUIStore();
     const userModels = getUserModels();
 
     const [message, setMessage] = useState('');
@@ -45,10 +49,6 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
     const setThinkingEnabled = (value: boolean) => {
         setThinkingEnabledRaw(value);
     };
-
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    const MAX_HEIGHT = 200;
 
     const thinkingCapability = supportsThinking(selectedModelId || '');
 
@@ -65,26 +65,6 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
             setThinkingEnabled(false);
         }
     }, [selectedModelId, thinkingCapability]);
-
-    const adjustTextareaHeight = () => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-
-        textarea.style.height = "auto";
-        const newHeight = textarea.scrollHeight;
-
-        if (newHeight > MAX_HEIGHT) {
-            textarea.style.height = `${MAX_HEIGHT}px`;
-            textarea.style.overflowY = "auto";
-        } else {
-            textarea.style.height = `${newHeight}px`;
-            textarea.style.overflowY = "hidden";
-        }
-    };
-
-    useEffect(() => {
-        adjustTextareaHeight();
-    }, [message]);
 
     // NEW: Cleanup preview URLs on unmount
     useEffect(() => {
@@ -119,8 +99,9 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
         }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+    // Handle Ctrl/Cmd + Enter to submit
+    const handleEditorKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             handleSubmit();
         }
@@ -193,17 +174,24 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
             {/* NEW: File preview bubble */}
             <FilePreviewBubble files={attachedFiles} onRemove={handleRemoveFile} />
 
-            {/* Textarea Field */}
-            <Textarea
-                ref={textareaRef}
-                placeholder="Type your message... (Shift+Enter for new line)"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full min-h-[60px] resize-none"
-                rows={2}
-                spellCheck={true}
-            />
+            {/* Rich Markdown Editor */}
+            <div
+                className="w-full border rounded-md overflow-hidden"
+                onKeyDown={handleEditorKeyDown}
+                data-color-mode={theme}
+            >
+                <MDEditor
+                    value={message}
+                    onChange={(value) => setMessage(value || '')}
+                    preview="edit"
+                    hideToolbar={false}
+                    height={100}
+                    visibleDragbar={false}
+                    textareaProps={{
+                        placeholder: 'Type your message... (Ctrl/Cmd+Enter to send, Shift+Enter for new line)'
+                    }}
+                />
+            </div>
 
             {/* Bottom Controls */}
             <div className="flex items-center justify-between">

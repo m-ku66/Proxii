@@ -53,6 +53,7 @@ export const useUIStore = create<UIState>((set) => ({
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
   // Theme
-  theme: "dark",
+  // 🎨 TO MANUALLY TEST THEMES: Change "light" to "dark" below and refresh!
+  theme: "light" as "light" | "dark",
   setTheme: (theme) => set({ theme }),
 }));

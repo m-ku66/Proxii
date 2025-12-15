@@ -174,11 +174,10 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
             {/* NEW: File preview bubble */}
             <FilePreviewBubble files={attachedFiles} onRemove={handleRemoveFile} />
 
-            {/* Rich Markdown Editor */}
+            {/* Rich Markdown Editor - FIXED: data-color-mode now on MDEditor itself */}
             <div
-                className="w-full border rounded-md overflow-hidden"
+                className="w-full border border-input rounded-md overflow-hidden"
                 onKeyDown={handleEditorKeyDown}
-                data-color-mode={theme}
             >
                 <MDEditor
                     value={message}
@@ -187,6 +186,8 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
                     hideToolbar={false}
                     height={100}
                     visibleDragbar={false}
+                    data-color-mode={theme}
+                    className="md-editor-themed"
                     textareaProps={{
                         placeholder: 'Type your message... (Ctrl/Cmd+Enter to send, Shift+Enter for new line)'
                     }}

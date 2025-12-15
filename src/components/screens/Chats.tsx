@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 
 export const Chats = () => {
     const { conversations, setActiveConversation, renameConversation, deleteConversation, toggleStar } = useChatStore();
-    const { setActiveScreen } = useUIStore();
+    const { setActiveScreen, theme } = useUIStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'all' | 'starred'>('all');
     const [currentPage, setCurrentPage] = useState(1);
@@ -100,7 +100,7 @@ export const Chats = () => {
 
     const handleDeleteSelected = async () => {
         if (selectedIds.size === 0) return;
-        
+
         const count = selectedIds.size;
         if (confirm(`Are you sure you want to delete ${count} ${count === 1 ? 'chat' : 'chats'}?`)) {
             for (const id of selectedIds) {
@@ -128,7 +128,7 @@ export const Chats = () => {
         if (diffMonths < 12) return `${diffMonths} months ago`;
         if (diffYears === 1) return '1 year ago';
         if (diffYears < 2) return `${diffYears} years ago`;
-        
+
         // For very old dates, show the actual date
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     };
@@ -147,26 +147,26 @@ export const Chats = () => {
         if (diffMinutes < 1) return 'Just now';
         if (diffMinutes === 1) return '1 minute ago';
         if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
-        
+
         // Hours
         if (diffHours === 1) return '1 hour ago';
         if (diffHours < 24) return `${diffHours} hours ago`;
-        
+
         // Days
         if (diffDays === 1) return 'Yesterday';
         if (diffDays < 7) return `${diffDays} days ago`;
-        
+
         // Weeks
         if (diffWeeks === 1) return '1 week ago';
         if (diffWeeks < 4) return `${diffWeeks} weeks ago`;
-        
+
         // Months
         if (diffMonths === 1) return '1 month ago';
         if (diffMonths < 12) return `${diffMonths} months ago`;
-        
+
         // Years
         if (diffYears === 1) return '1 year ago';
-        
+
         // For very old dates, show the actual date and time
         return date.toLocaleString('en-US', {
             month: 'short',
@@ -224,15 +224,15 @@ export const Chats = () => {
                             <Label className="text-sm text-muted-foreground">
                                 {selectedIds.size} selected
                             </Label>
-                            <Button 
-                                variant="destructive" 
+                            <Button
+                                variant="destructive"
                                 size="sm"
                                 onClick={handleDeleteSelected}
                             >
                                 Delete selected
                             </Button>
-                            <Button 
-                                variant="ghost" 
+                            <Button
+                                variant="ghost"
                                 size="sm"
                                 onClick={() => setSelectedIds(new Set())}
                             >
@@ -245,8 +245,8 @@ export const Chats = () => {
                                 {filteredConversations.length}{' '}
                                 {filteredConversations.length === 1 ? 'chat' : 'chats'}
                             </Label>
-                            <Button 
-                                variant="ghost" 
+                            <Button
+                                variant="ghost"
                                 size="sm"
                                 onClick={handleSelectAll}
                             >
@@ -265,7 +265,7 @@ export const Chats = () => {
                             key={conv.id}
                             variant="outline"
                             role="listitem"
-                            className="cursor-pointer hover:bg-accent transition-colors"
+                            className={`"cursor-pointer ${theme === 'dark' ? "hover:bg-foreground/5" : "hover:bg-accent"} transition-colors"`}
                             onClick={() => handleChatClick(conv.id)}
                         >
                             <ItemContent className="w-full">
@@ -313,11 +313,10 @@ export const Chats = () => {
                                                 }}
                                             >
                                                 <Star
-                                                    className={`h-4 w-4 mr-2 ${
-                                                        conv.starred
-                                                            ? 'fill-yellow-400 text-yellow-400'
-                                                            : ''
-                                                    }`}
+                                                    className={`h-4 w-4 mr-2 ${conv.starred
+                                                        ? 'fill-yellow-400 text-yellow-400'
+                                                        : ''
+                                                        }`}
                                                 />
                                                 {conv.starred ? 'Unstar' : 'Star'}
                                             </DropdownMenuItem>

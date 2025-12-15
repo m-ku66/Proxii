@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useModelStore } from '@/stores/modelStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useUIStore } from '@/stores/uiStore';
 import { refreshAppPricing } from '@/utils/initialization';
 import { getCacheStatus, refreshModelPricing } from '@/utils/modelPricing';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '../ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search, Sun, Moon } from 'lucide-react';
 import ModelInfoTooltip from '../ModelInfoTooltip';
 
 export const Settings = () => {
@@ -34,6 +36,11 @@ export const Settings = () => {
         setMaxContextMessages,
         setMaxMessagesWithImages,
     } = useSettingsStore();
+
+    const {
+        theme,
+        setTheme,
+    } = useUIStore();
 
     const [apiKey, setApiKey] = useState(openRouterApiKey || '');
     const [saving, setSaving] = useState(false);
@@ -117,6 +124,16 @@ export const Settings = () => {
         if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
         if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
         return 'Just now';
+    };
+
+    // Get theme icon
+    const getThemeIcon = (themeValue: typeof theme) => {
+        switch (themeValue) {
+            case 'light':
+                return <Sun className="h-4 w-4" />;
+            case 'dark':
+                return <Moon className="h-4 w-4" />;
+        }
     };
 
     return (
@@ -487,20 +504,75 @@ export const Settings = () => {
 
                 {/* Appearance Tab */}
                 <TabsContent value="appearance" className="space-y-6">
+                    {/* Theme Settings */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>Appearance Settings</CardTitle>
+                            <CardTitle>Theme</CardTitle>
                             <CardDescription>
-                                Customize the look and feel of Proxii
+                                Choose how Proxii looks on your device
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="theme-select">Color Mode</Label>
+                                <Select value={theme} onValueChange={(value: typeof theme) => setTheme(value)}>
+                                    <SelectTrigger id="theme-select" className="w-full">
+                                        <div className="flex items-center gap-2">
+                                            {getThemeIcon(theme)}
+                                            <SelectValue />
+                                        </div>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="light">
+                                            <div className="flex items-center gap-2">
+                                                <span>Light</span>
+                                            </div>
+                                        </SelectItem>
+                                        <SelectItem value="dark">
+                                            <div className="flex items-center gap-2">
+                                                <span>Dark</span>
+                                            </div>
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Preview */}
+                            <div className="mt-6 p-4 border rounded-lg bg-muted/30">
+                                <p className="text-sm font-medium mb-3">Preview</p>
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded bg-primary" />
+                                        <span className="text-sm">Primary</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded bg-secondary" />
+                                        <span className="text-sm">Secondary</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-8 w-8 rounded bg-accent" />
+                                        <span className="text-sm">Accent</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Future Customization Placeholder */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Customization</CardTitle>
+                            <CardDescription>
+                                Additional appearance options
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="text-center py-8">
                                 <p className="text-muted-foreground mb-2">
-                                    Appearance settings coming soon
+                                    Additional customization options coming soon
                                 </p>
                                 <p className="text-sm text-muted-foreground">
-                                    This section will include theming and accessibility options
+                                    Custom themes, font sizing, and more
                                 </p>
                             </div>
                         </CardContent>

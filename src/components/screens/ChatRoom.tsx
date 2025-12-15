@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { InputComponent } from '@/components/InputComponent';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,20 +22,21 @@ import { CodeBlock } from '@/components/message/CodeBlock';
 import { toast } from 'sonner';
 import { FileText, Music, Film } from 'lucide-react';
 import { formatFileSize } from '@/utils/fileUtils';
+import { useUIStore } from '@/stores/uiStore';
 
 
-// Thinking bubble component
+// Thinking bubble component - REFACTORED with theme variables
 const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     return (
-        <div className="mt-3 border border-neutral-500/30 bg-neutral-500/5 rounded-lg overflow-hidden mb-4 w-full">
+        <div className="mt-3 border border-primary/[10%] bg-muted/10 rounded-lg overflow-hidden mb-4 w-full">
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center gap-2 p-3 hover:bg-neutral-500/10 transition-colors"
+                className="w-full flex items-center gap-2 p-3 hover:bg-muted/20 transition-colors"
             >
-                <Brain className="h-4 w-4 text-neutral-500" />
-                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-400">
+                <Brain className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
                     Thinking Process
                 </span>
                 <motion.div
@@ -42,7 +44,7 @@ const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
                     transition={{ duration: 0.2 }}
                     className="ml-auto"
                 >
-                    <ChevronRight className="h-4 w-4 text-neutral-500" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </motion.div>
             </button>
 
@@ -55,7 +57,7 @@ const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                     >
-                        <div className="p-3 pt-0 border-t border-neutral-500/20">
+                        <div className="p-3 pt-0 border-t border-border/20">
                             <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-muted-foreground">
                                 <ReactMarkdown
                                     remarkPlugins={[remarkMath, remarkGfm]}
@@ -182,7 +184,7 @@ export const ChatRoom = () => {
             temperature: number;
             max_tokens: number;
         },
-        files?: File[] // ✅ ADD THIS
+        files?: File[]
     ) => {
         if (!activeConversationId) return;
 
@@ -197,7 +199,7 @@ export const ChatRoom = () => {
             maxTokens: options?.max_tokens,
             thinkingEnabled,
             model,
-            filesCount: files?.length || 0 // ✅ ADD THIS
+            filesCount: files?.length || 0
         });
 
         try {
@@ -207,7 +209,7 @@ export const ChatRoom = () => {
                 model,
                 thinkingEnabled,
                 options,
-                files // ✅ ADD THIS - pass files to sendMessage
+                files // pass files to sendMessage
             );
         } catch (error) {
             console.error('Failed to send message:', error);
@@ -374,7 +376,7 @@ export const ChatRoom = () => {
                                     {/* Message bubble content */}
                                     <div
                                         className={`rounded-lg p-4 ${message.role === 'user'
-                                            ? 'bg-primary text-primary-foreground'
+                                            ? 'bg-primary/[5%] text-primary'
                                             : 'bg-muted'
                                             } ${message.isStreaming ? 'animate-pulse' : ''}`}
                                     >
@@ -383,7 +385,7 @@ export const ChatRoom = () => {
                                             <ThinkingBubble thinkingTokens={message.thinkingTokens} />
                                         )}
 
-                                        {/* 🆕 FILE ATTACHMENTS DISPLAY */}
+                                        {/* 🆕 FILE ATTACHMENTS DISPLAY - REFACTORED with theme variables */}
                                         {message.files && message.files.length > 0 && (
                                             <div className="mb-3 space-y-2">
                                                 {/* Image thumbnails */}
@@ -394,14 +396,14 @@ export const ChatRoom = () => {
                                                             .map((file, idx) => (
                                                                 <div
                                                                     key={idx}
-                                                                    className="relative rounded overflow-hidden border border-white/20"
+                                                                    className="relative rounded overflow-hidden border border-border/40"
                                                                 >
                                                                     <img
                                                                         src={file.blobUrl || file.url} // Try blobUrl first, fallback to url
                                                                         alt={file.name}
                                                                         className="w-full h-32 object-cover"
                                                                     />
-                                                                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs truncate">
+                                                                    <div className={`absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs truncate ${useUIStore().theme === 'dark' ? 'text-primary' : "text-primary-foreground"}`}>
                                                                         {file.name}
                                                                     </div>
                                                                 </div>
@@ -409,7 +411,7 @@ export const ChatRoom = () => {
                                                     </div>
                                                 )}
 
-                                                {/* Other file types (PDF, audio, video) */}
+                                                {/* Other file types (PDF, audio, video) - REFACTORED with theme variables */}
                                                 {message.files.some(f => !f.type.startsWith('image/')) && (
                                                     <div className="space-y-1">
                                                         {message.files
@@ -422,7 +424,7 @@ export const ChatRoom = () => {
                                                                 return (
                                                                     <div
                                                                         key={idx}
-                                                                        className="flex items-center gap-2 px-3 py-2 rounded bg-white/10 border border-white/20"
+                                                                        className="flex items-center gap-2 px-3 py-2 rounded bg-background/50 border border-border/40"
                                                                     >
                                                                         {isPDF && <FileText className="h-4 w-4" />}
                                                                         {isAudio && <Music className="h-4 w-4" />}
@@ -679,21 +681,21 @@ export const ChatRoom = () => {
                 </div>
             </div>
 
-            {/* Rename Dialog */}
+            {/* Rename Dialog - REFACTORED with theme variables and proper Input component */}
             {renameDialog.isOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-background rounded-lg p-6 w-96">
+                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-background border border-border rounded-lg p-6 w-96 shadow-lg">
                         <h3 className="font-semibold mb-4">Rename Chat</h3>
-                        <input
+                        <Input
                             type="text"
                             value={renameDialog.currentTitle}
                             onChange={(e) => setRenameDialog(prev => ({
                                 ...prev,
                                 currentTitle: e.target.value
                             }))}
-                            className="w-full p-2 border rounded mb-4"
                             placeholder="Chat title..."
                             autoFocus
+                            className="mb-4"
                         />
                         <div className="flex gap-2 justify-end">
                             <Button

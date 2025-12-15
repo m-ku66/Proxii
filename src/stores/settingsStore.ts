@@ -7,10 +7,6 @@ interface SettingsStore {
   setOpenRouterApiKey: (key: string) => void;
   clearApiKey: () => void;
 
-  // App Settings
-  theme: "light" | "dark" | "system";
-  setTheme: (theme: "light" | "dark" | "system") => void;
-
   // Prompting Settings
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
@@ -43,13 +39,6 @@ export const useSettingsStore = create<SettingsStore>()(
 
       clearApiKey: () => {
         set({ openRouterApiKey: null });
-      },
-
-      // App Settings
-      theme: "system",
-
-      setTheme: (theme) => {
-        set({ theme });
       },
 
       // Prompting Settings
@@ -90,7 +79,6 @@ export const useSettingsStore = create<SettingsStore>()(
       // Only persist certain fields
       partialize: (state) => ({
         openRouterApiKey: state.openRouterApiKey,
-        theme: state.theme,
         systemPrompt: state.systemPrompt,
         maxContextMessages: state.maxContextMessages,
         maxMessagesWithImages: state.maxMessagesWithImages,

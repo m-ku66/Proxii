@@ -1,6 +1,6 @@
 # Proxii
 
-An open-source, local-first AI chat application built with Electron. Proxii provides a professional desktop experience for interacting with 400+ AI models through OpenRouter's API, with an emphasis on user control, data privacy, and a polished interface.
+An open-source, local-first AI chat application built with Electron. Proxii provides a professional desktop experience for interacting with 300+ AI models through OpenRouter's API, with an emphasis on user control, data privacy, and a polished interface.
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -14,7 +14,7 @@ Proxii emerged from frustration with existing LLM interfaces on Windows. It's bu
 ### Key Features
 
 #### 🤖 **Multi-Model Support**
-- Access 400+ AI models through OpenRouter (OpenAI, Anthropic, Google, DeepSeek, and more)
+- Access 300+ AI models through OpenRouter (OpenAI, Anthropic, Google, DeepSeek, and more)
 - Dynamic model pricing with local caching
 - Custom model collections tailored to your needs
 - Extended thinking support (Claude, o1, Gemini reasoning modes)
@@ -29,7 +29,7 @@ Proxii emerged from frustration with existing LLM interfaces on Windows. It's bu
 #### 📎 **Multimodal File Support**
 - Upload images, PDFs, audio, and video files
 - Smart compression for optimal API payload sizes
-- Multiple file attachments per message (up to 10)
+- Multiple file attachments per message (up to 5)
 - Preview thumbnails for attached files
 
 #### ⚙️ **Advanced Features**
@@ -38,14 +38,13 @@ Proxii emerged from frustration with existing LLM interfaces on Windows. It's bu
 - **Context Control**: Configurable conversation history limits
 - **Conversation Management**: Star favorites, rename, export to JSON
 - **Auto-Save**: Every message is saved locally in real-time
-- **Accessibility**: WCAG-compliant contrast ratios, theme customization
+- **Accessibility**: Theme customization and other features coming soon
 
-#### 🎨 **Polished UI/UX**
+#### 🎨 **UI/UX**
 - Custom dark and light themes
 - Smooth animations with Motion
 - Accessible Shadcn UI components
 - Collapsible sidebar navigation
-- Responsive design principles
 
 ## 🚀 Quick Start
 
@@ -281,5 +280,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Note**: Proxii is a work in progress. This is version 0.1.0 with core functionality complete. Future updates will bring additional features, integrations, and improvements.
-
-Built with ❤️ for developers who want control over their AI tools.

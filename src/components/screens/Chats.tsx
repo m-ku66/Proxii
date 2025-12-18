@@ -111,27 +111,27 @@ export const Chats = () => {
         }
     };
 
-    const formatDate = (date: Date) => {
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const diffWeeks = Math.floor(diffDays / 7);
-        const diffMonths = Math.floor(diffDays / 30);
-        const diffYears = Math.floor(diffDays / 365);
+    // const formatDate = (date: Date) => {
+    //     const now = new Date();
+    //     const diffMs = now.getTime() - date.getTime();
+    //     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    //     const diffWeeks = Math.floor(diffDays / 7);
+    //     const diffMonths = Math.floor(diffDays / 30);
+    //     const diffYears = Math.floor(diffDays / 365);
 
-        if (diffDays === 0) return 'Today';
-        if (diffDays === 1) return 'Yesterday';
-        if (diffDays < 7) return `${diffDays} days ago`;
-        if (diffWeeks === 1) return '1 week ago';
-        if (diffWeeks < 4) return `${diffWeeks} weeks ago`;
-        if (diffMonths === 1) return '1 month ago';
-        if (diffMonths < 12) return `${diffMonths} months ago`;
-        if (diffYears === 1) return '1 year ago';
-        if (diffYears < 2) return `${diffYears} years ago`;
+    //     if (diffDays === 0) return 'Today';
+    //     if (diffDays === 1) return 'Yesterday';
+    //     if (diffDays < 7) return `${diffDays} days ago`;
+    //     if (diffWeeks === 1) return '1 week ago';
+    //     if (diffWeeks < 4) return `${diffWeeks} weeks ago`;
+    //     if (diffMonths === 1) return '1 month ago';
+    //     if (diffMonths < 12) return `${diffMonths} months ago`;
+    //     if (diffYears === 1) return '1 year ago';
+    //     if (diffYears < 2) return `${diffYears} years ago`;
 
-        // For very old dates, show the actual date
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    };
+    //     // For very old dates, show the actual date
+    //     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // };
 
     const formatTime = (date: Date) => {
         const now = new Date();
@@ -286,8 +286,8 @@ export const Chats = () => {
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                            <span>Created {formatDate(conv.createdAt)}</span>
-                                            <span>•</span>
+                                            {/* <span>Created {formatDate(conv.createdAt)}</span>
+                                            <span>•</span> */}
                                             <span>Last message {formatTime(conv.updatedAt)}</span>
                                         </div>
                                     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useModelStore } from '@/stores/modelStore';
 import { useUIStore } from '@/stores/uiStore';
 import { supportsThinking } from '@/stores/chatStore';
@@ -45,6 +45,8 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
     const [maxTokens, setMaxTokens] = useState(4000);
     const [thinkingEnabled, setThinkingEnabledRaw] = useState(false);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]); // NEW: File state
+    const mdEditorRef = useRef<any>(null);
+
 
     const setThinkingEnabled = (value: boolean) => {
         setThinkingEnabledRaw(value);
@@ -89,13 +91,21 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
             onSubmit?.(message, selectedModelId, thinkingEnabled, {
                 temperature,
                 max_tokens: maxTokens,
-            }, files); // NEW: Pass files
+            }, files); // Pass files
 
             setMessage('');
 
-            // NEW: Clean up and clear files after submit
+            // Clean up and clear files after submit
             cleanupAttachedFiles(attachedFiles);
             setAttachedFiles([]);
+
+            // Refocus the editor after sending
+            setTimeout(() => {
+                mdEditorRef.current?.focus?.();
+                // Or try finding the textarea directly:
+                const textarea = document.querySelector('[data-color-mode]')?.querySelector('textarea');
+                textarea?.focus();
+            }, 0);
         }
     };
 
@@ -180,6 +190,7 @@ export const InputComponent = ({ onSubmit }: InputComponentProps) => {
                 onKeyDown={handleEditorKeyDown}
             >
                 <MDEditor
+                    ref={mdEditorRef}
                     value={message}
                     onChange={(value) => setMessage(value || '')}
                     preview="edit"

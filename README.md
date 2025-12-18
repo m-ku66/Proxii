@@ -1,39 +1,65 @@
-# Electron Boilerplate
+# Proxii
 
-A modern, production-ready Electron template with React, TypeScript, TailwindCSS, and comprehensive development tooling.
+An open-source, local-first AI chat application built with Electron. Proxii provides a professional desktop experience for interacting with 400+ AI models through OpenRouter's API, with an emphasis on user control, data privacy, and a polished interface.
 
-## Features
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Electron](https://img.shields.io/badge/Electron-38.0.0-47848F)
+![React](https://img.shields.io/badge/React-19.1.1-61DAFB)
 
-### Core Technologies
-- **Electron**: Cross-platform desktop application framework
-- **React 19**: Modern React with automatic JSX transform
-- **TypeScript**: Type-safe development with strict configuration
-- **TailwindCSS v3**: Utility-first CSS framework with PostCSS pipeline
-- **Vite**: Fast build tool with hot module replacement
+## 🎯 Overview
 
-### State Management & UI
-- **Zustand**: Lightweight state management solution
-- **Motion**: Modern animation library (formerly Framer Motion)
-- **Shadcn UI**: Accessible, unstyled UI components
+Proxii emerged from frustration with existing LLM interfaces on Windows. It's built to be the AI chat application you actually want to use—fast, local, and respectful of your data. Your conversations are saved locally to your filesystem, giving you complete control over your data without browser storage limitations.
 
-### Development Tools
-- **Vitest**: Fast unit testing framework
-- **Testing Library**: React component testing utilities
-- **ESLint**: Code linting with TypeScript support
-- **Electron Forge**: Build, package, and distribution tools
+### Key Features
 
-## Quick Start
+#### 🤖 **Multi-Model Support**
+- Access 400+ AI models through OpenRouter (OpenAI, Anthropic, Google, DeepSeek, and more)
+- Dynamic model pricing with local caching
+- Custom model collections tailored to your needs
+- Extended thinking support (Claude, o1, Gemini reasoning modes)
+
+#### 💬 **Professional Chat Interface**
+- Real-time streaming responses with thinking token visualization
+- Rich markdown rendering with syntax highlighting
+- LaTeX math support (KaTeX)
+- Code blocks with language detection and copy functionality
+- Live markdown editor with instant formatting preview
+
+#### 📎 **Multimodal File Support**
+- Upload images, PDFs, audio, and video files
+- Smart compression for optimal API payload sizes
+- Multiple file attachments per message (up to 10)
+- Preview thumbnails for attached files
+
+#### ⚙️ **Advanced Features**
+- **Message Management**: Resend, regenerate, edit, or delete messages
+- **Stop Generation**: Abort streaming responses mid-generation
+- **Context Control**: Configurable conversation history limits
+- **Conversation Management**: Star favorites, rename, export to JSON
+- **Auto-Save**: Every message is saved locally in real-time
+- **Accessibility**: WCAG-compliant contrast ratios, theme customization
+
+#### 🎨 **Polished UI/UX**
+- Custom dark and light themes
+- Smooth animations with Motion
+- Accessible Shadcn UI components
+- Collapsible sidebar navigation
+- Responsive design principles
+
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 16+ 
-- npm or yarn
+- **Node.js** 16+ 
+- **npm** or **yarn**
+- **OpenRouter API Key** ([Get one here](https://openrouter.ai/keys))
 
 ### Installation
 
-1. **Clone this repository:**
+1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
-   cd electron-boilerplate
+   git clone https://github.com/yourusername/proxii.git
+   cd proxii
    ```
 
 2. **Install dependencies:**
@@ -41,233 +67,219 @@ A modern, production-ready Electron template with React, TypeScript, TailwindCSS
    npm install
    ```
 
-3. **Start development:**
+3. **Start development mode:**
    ```bash
    npm start
    ```
 
-The Electron app will launch with hot reloading enabled for both the main process and renderer.
+The application will launch with hot reloading enabled for both the main process and renderer.
 
-## Project Structure
+### First-Time Setup
+
+1. Launch Proxii and navigate to **Settings**
+2. Add your **OpenRouter API Key**
+3. Click "Load Models" to fetch available models
+4. Add your preferred models to your collection
+5. Start chatting!
+
+## 📁 Project Structure
 
 ```
-electron-boilerplate/
+proxii/
 ├── src/
-│   ├── main.ts              # Electron main process
-│   ├── preload.ts           # Preload script for security
-│   ├── renderer.tsx         # React application entry
-│   ├── index.css           # TailwindCSS imports
-│   └── test/
-│       └── setup.ts        # Test configuration
+│   ├── components/          # React components
+│   │   ├── ui/             # Shadcn UI components
+│   │   ├── screens/        # Main app screens (Home, Chats, Settings, etc.)
+│   │   ├── message/        # Message-related components
+│   │   └── ...             # Other reusable components
+│   ├── stores/             # Zustand state management
+│   │   ├── chatStore.ts    # Chat and message state
+│   │   ├── modelStore.ts   # Model management and pricing
+│   │   ├── settingsStore.ts # User settings and preferences
+│   │   └── uiStore.ts      # UI state (theme, navigation, modals)
+│   ├── services/           # External API services
+│   │   └── apiService.ts   # OpenRouter API integration
+│   ├── utils/              # Utility functions
+│   │   ├── fileUtils.ts    # File handling and compression
+│   │   ├── modelPricing.ts # Pricing cache management
+│   │   └── messageUtils.ts # Message formatting and sanitization
+│   ├── types/              # TypeScript type definitions
+│   ├── main.ts             # Electron main process
+│   ├── preload.ts          # Preload script for IPC
+│   ├── renderer.tsx        # React application entry
+│   └── index.css           # Global styles and theme variables
 ├── forge.config.ts         # Electron Forge configuration
-├── vite.main.config.ts     # Vite config for main process
-├── vite.preload.config.ts  # Vite config for preload script
-├── vite.renderer.config.ts # Vite config for renderer process
-├── vitest.config.ts        # Test configuration
-├── tailwind.config.js      # TailwindCSS configuration
-├── postcss.config.js       # PostCSS configuration
-├── tsconfig.json          # TypeScript configuration
-└── index.html             # Renderer HTML template
+└── package.json            # Project metadata and dependencies
 ```
 
-## Available Scripts
+### Data Storage
+
+Conversations are automatically saved to:
+- **Windows**: `C:\Users\<username>\Documents\Proxii\conversations\`
+- **macOS**: `~/Documents/Proxii/conversations/`
+- **Linux**: `~/Documents/Proxii/conversations/`
+
+Each conversation is stored as a JSON file with its assets in a dedicated folder.
+
+## 🛠️ Tech Stack
+
+### Core Technologies
+- **Electron 38.0.0** - Cross-platform desktop framework
+- **React 19.1.1** - UI library with modern JSX transform
+- **TypeScript 5.7.2** - Type-safe development
+- **Vite 7.1.5** - Fast build tool with HMR
+- **TailwindCSS 3.4.17** - Utility-first CSS framework
+
+### State & UI
+- **Zustand 5.0.8** - Lightweight state management
+- **Motion 12.23.12** - Animation library
+- **Shadcn UI** - Accessible component library
+- **ReactMarkdown** - Markdown rendering
+- **KaTeX** - Math rendering
+- **React Syntax Highlighter** - Code syntax highlighting
+
+### Development Tools
+- **Vitest** - Unit testing framework
+- **ESLint** - Code linting
+- **Electron Forge** - Build and distribution
+
+## 💻 Available Scripts
 
 ### Development
-- `npm start` - Start development server with hot reloading
-- `npm run lint` - Run ESLint code analysis
+```bash
+npm start          # Start development server with hot reloading
+npm run lint       # Run ESLint code analysis
+```
 
 ### Testing
-- `npm test` - Run tests in watch mode
-- `npm run test:run` - Run tests once
-- `npm run test:ui` - Open Vitest UI interface
+```bash
+npm test           # Run tests in watch mode
+npm run test:run   # Run tests once
+npm run test:ui    # Open Vitest UI interface
+```
 
 ### Production
-- `npm run package` - Package the application for current platform
-- `npm run make` - Create distributables (installers, etc.)
-- `npm run publish` - Publish to configured distribution channels
-
-## Development Workflow
-
-### Adding New Dependencies
-
-For renderer process (React components):
 ```bash
-npm install <package-name>
+npm run package    # Package the application for current platform
+npm run make       # Create distributables (installers, etc.)
+npm run publish    # Publish to configured distribution channels
 ```
 
-For main process (Node.js/Electron APIs):
-```bash
-npm install <package-name>
-```
+## ⚙️ Configuration
 
-### Creating Components
+### Theme Customization
 
-Components should be placed in `src/components/` (create this directory as needed):
+Proxii uses CSS custom properties for theming. Edit `src/index.css` to customize colors:
 
-```typescript
-// src/components/Button.tsx
-interface ButtonProps {
-  children: React.ReactNode;
-  onClick?: () => void;
-}
-
-export const Button: React.FC<ButtonProps> = ({ children, onClick }) => {
-  return (
-    <button 
-      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-};
-```
-
-### State Management with Zustand
-
-```typescript
-// src/stores/appStore.ts
-import { create } from 'zustand';
-
-interface AppState {
-  count: number;
-  increment: () => void;
-  decrement: () => void;
-}
-
-export const useAppStore = create<AppState>((set) => ({
-  count: 0,
-  increment: () => set((state) => ({ count: state.count + 1 })),
-  decrement: () => set((state) => ({ count: state.count - 1 })),
-}));
-```
-
-### Testing Components
-
-```typescript
-// src/components/__tests__/Button.test.tsx
-import { render, screen, fireEvent } from '@testing-library/react';
-import { Button } from '../Button';
-
-test('button calls onClick when clicked', () => {
-  const handleClick = vi.fn();
-  render(<Button onClick={handleClick}>Click me</Button>);
-  
-  fireEvent.click(screen.getByText('Click me'));
-  expect(handleClick).toHaveBeenCalledTimes(1);
-});
-```
-
-## Configuration Details
-
-### TailwindCSS
-The TailwindCSS configuration is set up to scan all source files for class usage. Customize the theme in `tailwind.config.js`:
-
-```javascript
-module.exports = {
-  content: ["./src/**/*.{js,ts,jsx,tsx}", "./index.html"],
-  theme: {
-    extend: {
-      colors: {
-        brand: {
-          primary: '#your-color',
-          secondary: '#your-color',
-        }
-      }
-    },
-  },
-  plugins: [],
+```css
+:root {
+  --background: 0 0% 100%;           /* Main background */
+  --foreground: 0 0% 3.9%;           /* Primary text */
+  --muted: 0 0% 92%;                 /* Subtle backgrounds */
+  --muted-foreground: 0 0% 30%;      /* Secondary text */
+  --accent: 0 0% 95%;                /* Hover states */
+  --border: 0 0% 80%;                /* Borders */
+  /* ... more colors */
 }
 ```
 
-### TypeScript
-Strict TypeScript configuration is enabled. Key settings:
-- `strict: true` - Enable all strict type checking
-- `jsx: "react-jsx"` - Modern JSX transform
-- `moduleResolution: "bundler"` - Vite-compatible module resolution
+Colors use HSL format: `hue saturation% lightness%`
 
-### Electron Security
-The preload script provides a secure bridge between main and renderer processes. Customize in `src/preload.ts` to expose specific APIs to the renderer.
+### Context Management
 
-## Building for Production
+Control conversation context in Settings → Prompting:
+- **Max Context Messages**: Number of messages sent to API (default: 20)
+- **Messages With Images**: How many recent messages include images (default: 5)
 
-### Package Application
+Older messages keep text but strip images to reduce payload size.
+
+### System Prompt
+
+Add a global system prompt in Settings → Prompting that prepends to every conversation.
+
+## 🎨 Features in Detail
+
+### Extended Thinking
+
+Proxii supports extended reasoning modes for compatible models:
+- **Claude**: Extended thinking up to 10k tokens
+- **OpenAI o1**: Reasoning effort levels (low, medium, high)
+- **Gemini**: Reasoning tokens up to 8k
+
+Enable in the input settings popover when using compatible models.
+
+### File Attachments
+
+Supported file types:
+- **Images**: PNG, JPG, JPEG, GIF, WebP
+- **Documents**: PDF
+- **Audio**: MP3, WAV, M4A, AAC, FLAC
+- **Video**: MP4, WebM, MOV
+
+Files are automatically compressed and base64-encoded for API transmission.
+
+### Message Actions
+
+Every message has contextual actions:
+- **User Messages**: Resend, Edit, Copy, Delete
+- **AI Messages**: Regenerate, Edit, Copy, Delete
+- **Streaming Messages**: Stop Generation (abort mid-response)
+
+### Conversation Management
+
+- **Star conversations** to mark favorites
+- **Rename** conversations for better organization
+- **Export to JSON** for backup or analysis
+- **Multi-select delete** for bulk cleanup
+- Automatic sorting by most recent update
+
+## 🏗️ Building for Production
+
+### Package for Current Platform
 ```bash
 npm run package
 ```
 Creates a packaged application in the `out/` directory.
 
-### Create Distributables
+### Create Installers
 ```bash
 npm run make
 ```
-Creates platform-specific installers and distributables.
+Generates platform-specific installers:
+- **Windows**: Squirrel installer
+- **macOS**: ZIP archive
+- **Linux**: .deb and .rpm packages
 
-### Platform-Specific Builds
-Configure target platforms in `forge.config.ts`:
+Configure target platforms in `forge.config.ts`.
 
-```typescript
-makers: [
-  new MakerSquirrel({}),           // Windows installer
-  new MakerZIP({}, ['darwin']),    // macOS zip
-  new MakerDeb({}),               // Linux .deb
-  new MakerRpm({})                // Linux .rpm
-]
-```
+## 🤝 Contributing
 
-## Using as a Template
-
-This repository is designed to be used as a template for new Electron projects:
-
-1. **Use GitHub template feature** (if this is a GitHub repository)
-2. **Or clone and customize:**
-   ```bash
-   git clone <this-repo-url> my-new-app
-   cd my-new-app
-   rm -rf .git
-   git init
-   # Update package.json name, description, etc.
-   npm install
-   ```
-
-3. **Customize for your project:**
-   - Update `package.json` metadata
-   - Modify the window title in `index.html`
-   - Replace the demo content in `src/renderer.tsx`
-   - Add your application logic
-
-## Common Issues
-
-### Vite Version Compatibility
-If you encounter TailwindCSS compatibility issues, ensure Vite version matches TailwindCSS requirements. This template uses stable versions that are known to work together.
-
-### TypeScript Errors
-Make sure all `.tsx` files contain JSX and `.ts` files contain only TypeScript. The build system expects this file extension convention.
-
-### Testing Setup
-If tests fail to run, ensure `jsdom` is installed and `vitest.config.ts` is properly configured with the jsdom environment.
-
-## Contributing
+Contributions are welcome! Proxii is still in early development (v0.1.0).
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+## 📝 License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
-## Tech Stack Versions
+## 🙏 Acknowledgments
 
-- Electron: 38.0.0
-- React: 19.1.1
-- TypeScript: 4.5.4
-- TailwindCSS: 3.4.17
-- Vite: 7.1.5
-- Vitest: 3.2.4
-- Zustand: 5.0.8
-- Motion: 12.23.12
+- Built with [Electron Forge](https://www.electronforge.io/)
+- UI components from [Shadcn UI](https://ui.shadcn.com/)
+- Powered by [OpenRouter](https://openrouter.ai/)
+- Inspired by the need for better desktop AI interfaces
 
-*This boilerplate is still being worked on and developed so some of these instructions may change or be slightly innacurate!*
+## 📮 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/proxii/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/proxii/discussions)
+
+---
+
+**Note**: Proxii is a work in progress. This is version 0.1.0 with core functionality complete. Future updates will bring additional features, integrations, and improvements.
+
+Built with ❤️ for developers who want control over their AI tools.

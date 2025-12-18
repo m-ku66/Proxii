@@ -537,21 +537,85 @@ export const Settings = () => {
                                 </Select>
                             </div>
 
-                            {/* Preview */}
+                            {/* Preview - UPDATED to show actual colors used in app */}
                             <div className="mt-6 p-4 border rounded-lg bg-muted/30">
-                                <p className="text-sm font-medium mb-3">Preview</p>
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-8 w-8 rounded bg-primary" />
-                                        <span className="text-sm">Primary</span>
+                                <p className="text-sm font-medium mb-3">Color Palette</p>
+                                <p className="text-xs text-muted-foreground mb-4">These are the main colors used throughout Proxii</p>
+                                <div className="space-y-3">
+                                    {/* Background/Foreground */}
+                                    <div>
+                                        <p className="text-xs font-medium mb-2 text-muted-foreground">Base Colors</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-10 w-10 rounded border bg-background" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Background</p>
+                                                <p className="text-xs text-muted-foreground">Main app background</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="h-10 w-10 rounded border bg-foreground" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Foreground</p>
+                                                <p className="text-xs text-muted-foreground">Primary text color</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-8 w-8 rounded bg-secondary" />
-                                        <span className="text-sm">Secondary</span>
+
+                                    {/* Muted Colors */}
+                                    <div className="pt-3 border-t">
+                                        <p className="text-xs font-medium mb-2 text-muted-foreground">Secondary Colors</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-10 w-10 rounded border bg-muted" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Muted</p>
+                                                <p className="text-xs text-muted-foreground">Subtle backgrounds, tabs</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="h-10 w-10 rounded border bg-muted-foreground" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Muted Foreground</p>
+                                                <p className="text-xs text-muted-foreground">Secondary text, icons</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-8 w-8 rounded bg-accent" />
-                                        <span className="text-sm">Accent</span>
+
+                                    {/* Interactive Colors */}
+                                    <div className="pt-3 border-t">
+                                        <p className="text-xs font-medium mb-2 text-muted-foreground">Interactive Colors</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-10 w-10 rounded border bg-accent" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Accent</p>
+                                                <p className="text-xs text-muted-foreground">Hover states, highlights</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="h-10 w-10 rounded border border-border" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Border</p>
+                                                <p className="text-xs text-muted-foreground">All borders and dividers</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Primary/Card Colors */}
+                                    <div className="pt-3 border-t">
+                                        <p className="text-xs font-medium mb-2 text-muted-foreground">Component Colors</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-10 w-10 rounded border bg-card" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Card</p>
+                                                <p className="text-xs text-muted-foreground">Containers, sidebar</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <div className="h-10 w-10 rounded bg-primary" />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium">Primary</p>
+                                                <p className="text-xs text-muted-foreground">Buttons, active states</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

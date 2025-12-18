@@ -1,5 +1,5 @@
 import { useUIStore } from '../stores/uiStore';
-import { Button } from '../../components/ui/button';
+import { Button } from './ui/button';
 import { Home, MessageSquare, FolderKanban, Settings, X } from 'lucide-react';
 
 export const Sidebar = () => {

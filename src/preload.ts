@@ -12,6 +12,7 @@ export interface Conversation {
   createdAt: Date;
   updatedAt: Date;
   starred?: boolean;
+  projectId?: string | null; // Links to a project (optional for backward compatibility)
 }
 
 export interface Message {

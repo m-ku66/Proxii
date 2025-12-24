@@ -35,9 +35,9 @@ const createWindow = () => {
   }
 
   // Open the DevTools in development
-  if (process.env.NODE_ENV === "development") {
-    mainWindow.webContents.openDevTools();
-  }
+  // if (process.env.NODE_ENV === "development") {
+  //   mainWindow.webContents.openDevTools();
+  // }
 };
 
 // IPC Handlers for conversation management

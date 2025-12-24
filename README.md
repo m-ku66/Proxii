@@ -11,6 +11,10 @@ An open-source, local-first AI chat application built with Electron. Proxii prov
 
 Proxii emerged from frustration with existing LLM interfaces on Windows. It's built to be the AI chat application you actually want to use—fast, local, and respectful of your data. Your conversations are saved locally to your filesystem, giving you complete control over your data without browser storage limitations.
 
+### Changelog
+- 12/20/25 | V0 completed
+- 12/24/25 | Created the foundation for the projects feature. Projects are currently UNSTABLE. Do not use!
+
 ### Key Features
 
 #### 🤖 **Multi-Model Support**

@@ -5,6 +5,7 @@ import { Home } from './screens/Home';
 import { Chats } from './screens/Chats';
 import { ChatRoom } from './screens/ChatRoom';
 import { Projects } from './screens/Projects';
+import { ProjectDetail } from './screens/ProjectDetail';
 import { Settings } from './screens/Settings';
 import { Toaster } from './ui/sonner';
 
@@ -34,6 +35,8 @@ export const Layout = () => {
                 return <ChatRoom />;
             case 'projects':
                 return <Projects />;
+            case 'projectDetail':
+                return <ProjectDetail />;
             case 'settings':
                 return <Settings />;
             default:

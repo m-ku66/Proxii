@@ -173,6 +173,7 @@ export interface Conversation {
   createdAt: Date;
   updatedAt: Date;
   starred?: boolean;
+  projectId?: string | null;
 }
 
 interface ChatStore {
@@ -182,8 +183,9 @@ interface ChatStore {
   error: string | null;
   currentAbortController: AbortController | null;
 
+  getConversationsByProject: (projectId: string | null) => Conversation[];
   setActiveConversation: (id: string) => void;
-  createNewChat: (title: string, firstMessage?: Message) => void;
+  createNewChat: (title: string, firstMessage?: Message, projectId?: string | null) => void;
   addMessage: (
     conversationId: string,
     content: MessageContent,
@@ -328,17 +330,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   error: null,
   currentAbortController: null,
 
+  getConversationsByProject: (projectId: string | null) => {
+    return get().conversations.filter((conv) => conv.projectId === projectId);
+  },
+
   setActiveConversation: (id) => {
     set({ activeConversationId: id });
   },
 
-  createNewChat: (title, firstMessage) => {
+  createNewChat: (title, firstMessage, projectId?: string | null) => {
     const newConversation: Conversation = {
       id: `conv-${Date.now()}`,
       title,
       createdAt: new Date(),
       updatedAt: new Date(),
+      starred: false,
       messages: firstMessage ? [firstMessage] : [],
+      projectId: projectId || null,
     };
 
     set((state) => ({

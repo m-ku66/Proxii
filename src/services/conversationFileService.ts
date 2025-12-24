@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { app } from "electron";
-import type { Conversation, Message } from "../preload";
+import type { Conversation } from "../preload";
 
 export class ConversationFileService {
   private conversationsPath: string;

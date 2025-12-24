@@ -2,7 +2,7 @@ import React from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-type Screen = "home" | "chats" | "chatRoom" | "projects" | "settings";
+type Screen = "home" | "chats" | "chatRoom" | "projects" | "projectDetail" | "settings";
 
 interface ModalState {
   isOpen: boolean;

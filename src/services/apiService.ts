@@ -226,17 +226,37 @@ export async function sendChatCompletionStream(
           }
 
           try {
-            const chunk: StreamChunk = JSON.parse(data);
+          const chunk: StreamChunk = JSON.parse(data);
 
-            // Extract content and thinking from delta
-            const delta = chunk.choices[0]?.delta;
+          // Extract content and thinking from delta
+          const delta = chunk.choices[0]?.delta;
 
-            if (delta?.content) {
-              callbacks.onContent?.(delta.content);
-            }
-
+          // Handle different thinking formats based on model type:
+          
+          // FORMAT 1: OpenAI o1 / Gemini - thinking in delta.reasoning
             if (delta?.reasoning) {
-              callbacks.onThinking?.(delta.reasoning);
+            callbacks.onThinking?.(delta.reasoning);
+          }
+
+          // FORMAT 2: Claude - thinking/content as array of blocks
+          if (delta?.content) {
+          // If content is an array of content blocks (Claude multimodal format)
+          if (Array.isArray(delta.content)) {
+          for (const block of delta.content) {
+          // Thinking block - route to onThinking
+          if (block.type === "thinking" && block.thinking) {
+            callbacks.onThinking?.(block.thinking);
+          }
+          // Text block - route to onContent
+            else if (block.type === "text" && block.text) {
+                callbacks.onContent?.(block.text);
+              }
+            }
+          }
+          // If content is a string (legacy/simple format - backwards compatibility)
+            else if (typeof delta.content === "string") {
+                callbacks.onContent?.(delta.content);
+              }
             }
 
             // Check for usage data (sent in final chunk)

@@ -69,7 +69,7 @@ const ThinkingBubble = ({ thinkingTokens }: { thinkingTokens: string }) => {
                                             const codeString = String(children).replace(/\n$/, '');
                                             return <CodeBlock inline={inline} language={language}>{codeString}</CodeBlock>;
                                         },
-                                        p: ({ children }) => <p className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
+                                        p: ({ children }) => <div className="mb-2 last:mb-0 whitespace-pre-wrap">{children}</div>,
                                     }}
                                 >
                                     {thinkingTokens}
@@ -461,8 +461,8 @@ export const ChatRoom = () => {
                                                     h2: ({ children }) => <h2 className="text-xl font-bold mt-5 mb-3">{children}</h2>,
                                                     h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2">{children}</h3>,
                                                     h4: ({ children }) => <h4 className="text-base font-semibold mt-3 mb-2">{children}</h4>,
-                                                    // Paragraphs
-                                                    p: ({ children }) => <p className="mb-4 last:mb-0 whitespace-pre-wrap leading-relaxed">{children}</p>,
+                                                    // Paragraphs - using div to avoid nesting issues with code blocks
+                                                    p: ({ children }) => <div className="mb-4 last:mb-0 whitespace-pre-wrap leading-relaxed">{children}</div>,
                                                     // Lists with proper spacing
                                                     ul: ({ children }) => <ul className="list-disc list-outside ml-6 mb-4 space-y-2">{children}</ul>,
                                                     ol: ({ children }) => <ol className="list-decimal list-outside ml-6 mb-4 space-y-2">{children}</ol>,

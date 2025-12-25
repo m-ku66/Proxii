@@ -185,7 +185,11 @@ interface ChatStore {
 
   getConversationsByProject: (projectId: string | null) => Conversation[];
   setActiveConversation: (id: string) => void;
-  createNewChat: (title: string, firstMessage?: Message, projectId?: string | null) => void;
+  createNewChat: (
+    title: string,
+    firstMessage?: Message,
+    projectId?: string | null
+  ) => void;
   addMessage: (
     conversationId: string,
     content: MessageContent,
@@ -699,9 +703,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (thinkingCapability === "reasoning_effort") {
           requestParams.reasoning_effort = "high";
         } else if (thinkingCapability === "thinking") {
-          requestParams.thinking = {
-            type: "enabled",
-            budget_tokens: 10000,
+          // OpenRouter uses "reasoning" parameter for Claude extended thinking
+          // https://openrouter.ai/docs/api-reference/parameters
+          // Reasoning budget must be >= 1024 and < max_tokens
+          // Allocate 50% of max_tokens to reasoning (e.g. 2000 for thinking, 2000 for response)
+          const maxTokens = requestParams.max_tokens || 4000;
+          const reasoningBudget = Math.max(
+            1024, // Minimum required
+            Math.floor(maxTokens * 0.5) // 50% of total budget
+          );
+          requestParams.reasoning = {
+            max_tokens: reasoningBudget,
           };
         } else if (thinkingCapability === "max_reasoning_tokens") {
           requestParams.max_reasoning_tokens = 8000;
@@ -711,6 +723,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Create AbortController for this request
       const abortController = new AbortController();
       set({ currentAbortController: abortController });
+
+      // 🔍 DEBUG: Log API request to monitor thinking behavior
+      console.log(
+        "🔍 Final API request params:",
+        JSON.stringify(requestParams, null, 2)
+      );
 
       // Stream the response
       await sendChatCompletionStream(
@@ -1048,19 +1066,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         targetMessage.thinkingTokens && targetMessage.thinkingTokens.trim();
 
       if (hadThinking && thinkingCapability) {
-        switch (thinkingCapability) {
-          case "reasoning_effort":
-            requestParams.reasoning = { effort: "high" };
-            break;
-          case "thinking":
-            requestParams.reasoning = { max_tokens: 1024 };
-            break;
-          case "max_reasoning_tokens":
-            requestParams.reasoning = { max_tokens: 8000 };
-            break;
-          case "always":
-            // DeepSeek - always thinks
-            break;
+        if (thinkingCapability === "reasoning_effort") {
+          requestParams.reasoning_effort = "high";
+        } else if (thinkingCapability === "thinking") {
+          // OpenRouter uses "reasoning" parameter for Claude extended thinking
+          // Reasoning budget must be >= 1024 and < max_tokens
+          const maxTokens = requestParams.max_tokens || 4000;
+          const reasoningBudget = Math.max(
+            1024, // Minimum required
+            Math.floor(maxTokens * 0.5) // 50% of total budget
+          );
+          requestParams.reasoning = {
+            max_tokens: reasoningBudget,
+          };
+        } else if (thinkingCapability === "max_reasoning_tokens") {
+          requestParams.max_reasoning_tokens = 8000;
         }
       }
 

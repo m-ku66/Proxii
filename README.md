@@ -14,6 +14,7 @@ Proxii emerged from frustration with existing LLM interfaces on Windows. It's bu
 ### Changelog
 - 12/20/25 | V0 completed
 - 12/24/25 | Created the foundation for the projects feature. Projects are currently UNSTABLE. Do not use!
+- 12/25/25 | Patched model thinking toggle issues and tpast background UI glitches🎄
 
 ### Key Features
 

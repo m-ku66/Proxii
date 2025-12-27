@@ -7,6 +7,7 @@
 import { useSettingsStore } from "@/stores/settingsStore";
 import { sanitizeMessageContent } from "@/utils/messageUtils";
 import type { MessageContent } from "@/types/multimodal";
+import type { ToolCall, ToolCallDelta } from "@/types/tools";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -56,6 +57,7 @@ export interface StreamChunk {
     delta: {
       content?: string;
       reasoning?: string; // Some models (like o1) send thinking here
+      tool_calls?: ToolCallDelta[]; // Tool call deltas during streaming
     };
     finish_reason?: string | null;
   }>;
@@ -69,6 +71,7 @@ export interface StreamChunk {
 export interface StreamCallbacks {
   onContent?: (content: string) => void;
   onThinking?: (thinking: string) => void;
+  onToolCalls?: (toolCalls: ToolCall[], finishReason: string) => void; // Called when model requests tools
   onComplete?: (usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -174,7 +177,10 @@ export async function sendChatCompletionStream(
       console.error("❌ OpenRouter API Error:", {
         status: response.status,
         statusText: response.statusText,
-        errorData: errorData,
+        errorMessage: errorData.error?.message, // ✨ Explicit error message
+        errorType: errorData.error?.type, // ✨ Error type
+        errorCode: errorData.error?.code, // ✨ Error code
+        fullErrorData: errorData, // Full error object
         requestPayloadSize: JSON.stringify(request).length,
       });
 
@@ -193,6 +199,11 @@ export async function sendChatCompletionStream(
 
     const decoder = new TextDecoder();
     let buffer = "";
+
+    // 🔧 Accumulate tool calls as they stream in
+    // OpenRouter sends tool calls incrementally with an 'index' field
+    // We build up partial tool calls and convert to complete ToolCall[] at the end
+    let accumulatedToolCalls: Map<number, Partial<ToolCall>> = new Map();
 
     // Read the stream
     while (true) {
@@ -226,35 +237,123 @@ export async function sendChatCompletionStream(
           }
 
           try {
-          const chunk: StreamChunk = JSON.parse(data);
+            const chunk: StreamChunk = JSON.parse(data);
 
-          // Extract content and thinking from delta
-          const delta = chunk.choices[0]?.delta;
+            // Extract content and thinking from delta
+            const delta = chunk.choices[0]?.delta;
+            const finishReason = chunk.choices[0]?.finish_reason;
 
-          // Handle different thinking formats based on model type:
-          
-          // FORMAT 1: OpenAI o1 / Gemini - thinking in delta.reasoning
-            if (delta?.reasoning) {
-            callbacks.onThinking?.(delta.reasoning);
-          }
+            // 🔧 Handle tool calls
+            if (delta?.tool_calls) {
+              // 🛡️ DEFENSIVE CHECK: Validate tool_calls is an array
+              if (Array.isArray(delta.tool_calls)) {
+                // OpenRouter streams tool calls incrementally using 'index'
+                // We need to merge each delta into our accumulated map
+                for (const toolCallDelta of delta.tool_calls as ToolCallDelta[]) {
+                  const index = toolCallDelta.index ?? 0;
+                  const existing = accumulatedToolCalls.get(index) || {
+                    id: "",
+                    type: "function" as const,
+                    function: { name: "", arguments: "" },
+                  };
 
-          // FORMAT 2: Claude - thinking/content as array of blocks
-          if (delta?.content) {
-          // If content is an array of content blocks (Claude multimodal format)
-          if (Array.isArray(delta.content)) {
-          for (const block of delta.content) {
-          // Thinking block - route to onThinking
-          if (block.type === "thinking" && block.thinking) {
-            callbacks.onThinking?.(block.thinking);
-          }
-          // Text block - route to onContent
-            else if (block.type === "text" && block.text) {
-                callbacks.onContent?.(block.text);
+                  // Merge the delta into the existing tool call
+                  if (toolCallDelta.id) existing.id = toolCallDelta.id;
+                  if (toolCallDelta.type) existing.type = toolCallDelta.type;
+                  if (toolCallDelta.function) {
+                    if (toolCallDelta.function.name) {
+                      existing.function != undefined
+                        ? (existing.function.name = toolCallDelta.function.name)
+                        : "undefined";
+                    }
+                    if (toolCallDelta.function.arguments) {
+                      existing.function != undefined
+                        ? (existing.function.arguments +=
+                            toolCallDelta.function.arguments)
+                        : "undefined";
+                    }
+                  }
+
+                  accumulatedToolCalls.set(index, existing);
+                }
+                console.log("🔧 Tool call delta received:", delta.tool_calls);
+              } else {
+                console.error(
+                  "❌ Invalid tool_calls format (not an array):",
+                  delta.tool_calls
+                );
               }
             }
-          }
-          // If content is a string (legacy/simple format - backwards compatibility)
-            else if (typeof delta.content === "string") {
+
+            // 🔧 If finish_reason is "tool_calls", the model wants to use tools
+            if (
+              finishReason === "tool_calls" &&
+              accumulatedToolCalls.size > 0
+            ) {
+              // Convert Map to array of tool calls (should be complete by now)
+              const toolCallsArray = Array.from(
+                accumulatedToolCalls.values()
+              ) as ToolCall[];
+
+              console.log(
+                `🔧 Model requested ${toolCallsArray.length} tool(s):`,
+                toolCallsArray
+                  .map((tc) => tc.function?.name || "[null]")
+                  .join(", ")
+              );
+              console.log(
+                "🔍 Full tool call structure:",
+                JSON.stringify(toolCallsArray, null, 2)
+              );
+
+              // 🛡️ Filter out any malformed tool calls before passing to executor
+              const validToolCalls = toolCallsArray.filter((tc) => {
+                const isValid = tc.id && tc.function && tc.function.name;
+                if (!isValid) {
+                  console.warn("⚠️ Skipping malformed tool call:", tc);
+                  console.warn("⚠️ Missing: ", {
+                    id: !tc.id,
+                    function: !tc.function,
+                    name: !tc.function?.name,
+                  });
+                }
+                return isValid;
+              });
+
+              if (validToolCalls.length > 0) {
+                callbacks.onToolCalls?.(validToolCalls, finishReason);
+              } else {
+                console.error(
+                  "❌ All tool calls were malformed! Original:",
+                  toolCallsArray
+                );
+              }
+            }
+
+            // Handle different thinking formats based on model type:
+
+            // FORMAT 1: OpenAI o1 / Gemini - thinking in delta.reasoning
+            if (delta?.reasoning) {
+              callbacks.onThinking?.(delta.reasoning);
+            }
+
+            // FORMAT 2: Claude - thinking/content as array of blocks
+            if (delta?.content) {
+              // If content is an array of content blocks (Claude multimodal format)
+              if (Array.isArray(delta.content)) {
+                for (const block of delta.content) {
+                  // Thinking block - route to onThinking
+                  if (block.type === "thinking" && block.thinking) {
+                    callbacks.onThinking?.(block.thinking);
+                  }
+                  // Text block - route to onContent
+                  else if (block.type === "text" && block.text) {
+                    callbacks.onContent?.(block.text);
+                  }
+                }
+              }
+              // If content is a string (legacy/simple format - backwards compatibility)
+              else if (typeof delta.content === "string") {
                 callbacks.onContent?.(delta.content);
               }
             }

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { toolRegistry } from "@/tools/registry";
 
 interface SettingsStore {
   // API Configuration
@@ -19,6 +20,12 @@ interface SettingsStore {
 
   // Pricing Settings
   lastPricingUpdate: number | null;
+
+  // Tool Management
+  enabledTools: string[]; // Array of enabled tool IDs
+  toggleTool: (toolId: string) => void;
+  isToolEnabled: (toolId: string) => boolean;
+  setEnabledTools: (toolIds: string[]) => void;
 
   // Helper methods
   hasApiKey: () => boolean;
@@ -68,6 +75,32 @@ export const useSettingsStore = create<SettingsStore>()(
       // Pricing
       lastPricingUpdate: null,
 
+      // Tool Management
+      enabledTools: toolRegistry
+        .getAllTools()
+        .filter((tool) => tool.metadata.enabled) // Get default enabled tools
+        .map((tool) => tool.metadata.id),
+
+      toggleTool: (toolId: string) => {
+        set((state) => {
+          const isEnabled = state.enabledTools.includes(toolId);
+          return {
+            enabledTools: isEnabled
+              ? state.enabledTools.filter((id) => id !== toolId)
+              : [...state.enabledTools, toolId],
+          };
+        });
+      },
+
+      isToolEnabled: (toolId: string) => {
+        const { enabledTools } = get();
+        return enabledTools.includes(toolId);
+      },
+
+      setEnabledTools: (toolIds: string[]) => {
+        set({ enabledTools: toolIds });
+      },
+
       // Helper methods
       hasApiKey: () => {
         const { openRouterApiKey } = get();
@@ -82,6 +115,7 @@ export const useSettingsStore = create<SettingsStore>()(
         systemPrompt: state.systemPrompt,
         maxContextMessages: state.maxContextMessages,
         maxMessagesWithImages: state.maxMessagesWithImages,
+        enabledTools: state.enabledTools,
       }),
     }
   )

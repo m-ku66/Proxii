@@ -12,8 +12,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Slider } from '../ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search, Sun, Moon } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertCircle, Clock, Plus, X, Search, Sun, Moon, Wrench } from 'lucide-react';
 import ModelInfoTooltip from '../ModelInfoTooltip';
+import { toolRegistry } from '@/tools/registry';
+import { Switch } from '@/components/ui/switch';
 
 export const Settings = () => {
     const {
@@ -35,6 +37,9 @@ export const Settings = () => {
         maxMessagesWithImages,
         setMaxContextMessages,
         setMaxMessagesWithImages,
+        enabledTools,
+        toggleTool,
+        isToolEnabled,
     } = useSettingsStore();
 
     const {
@@ -48,7 +53,7 @@ export const Settings = () => {
     const [cacheStatus, setCacheStatus] = useState(getCacheStatus());
     const [lastRefresh, setLastRefresh] = useState<string | null>(null);
     const [modelSearch, setModelSearch] = useState('');
-    const [activeTab, setActiveTab] = useState<'api' | 'models' | 'prompting' | 'appearance'>('api');
+    const [activeTab, setActiveTab] = useState<'api' | 'models' | 'prompting' | 'tools' | 'appearance'>('api');
 
     // Update cache status on mount and when relevant
     useEffect(() => {
@@ -152,6 +157,7 @@ export const Settings = () => {
                     <TabsTrigger value="api">API & Pricing</TabsTrigger>
                     <TabsTrigger value="models">Model Collection</TabsTrigger>
                     <TabsTrigger value="prompting">Prompting</TabsTrigger>
+                    <TabsTrigger value="tools">Tools</TabsTrigger>
                     <TabsTrigger value="appearance">Appearance</TabsTrigger>
                 </TabsList>
 
@@ -498,6 +504,157 @@ export const Settings = () => {
                                     Only the most recent messages will include images. Older messages keep their text but images are stripped to reduce payload size.
                                 </p>
                             </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* Tools Tab */}
+                <TabsContent value="tools" className="space-y-6">
+                    {/* Tools Header */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Available Tools</CardTitle>
+                            <CardDescription>
+                                Enable or disable tools that the AI can use during conversations. Enabled tools will be available in all chats.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-1">
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Tools allow the AI to perform actions like checking the current date/time, reading files, or searching your project. Only enabled tools are sent to the AI.
+                            </p>
+                            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+                                <Wrench className="h-4 w-4 text-muted-foreground" />
+                                <p className="text-xs text-muted-foreground">
+                                    {enabledTools.length} of {toolRegistry.getAllTools().length} tools enabled
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* System Tools */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>System Tools</CardTitle>
+                            <CardDescription>
+                                Basic system information and utilities
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {toolRegistry.getToolsByCategory('system').map((tool) => (
+                                <div
+                                    key={tool.metadata.id}
+                                    className="flex items-start justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                                >
+                                    <div className="flex-1 min-w-0 mr-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-medium">{tool.metadata.name}</p>
+                                            <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                                                {tool.metadata.id}
+                                            </code>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {tool.metadata.description}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={isToolEnabled(tool.metadata.id)}
+                                        onCheckedChange={() => toggleTool(tool.metadata.id)}
+                                    />
+                                </div>
+                            ))}
+                            {toolRegistry.getToolsByCategory('system').length === 0 && (
+                                <p className="text-sm text-muted-foreground text-center py-4">
+                                    No system tools available
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Project Tools */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Project Tools</CardTitle>
+                            <CardDescription>
+                                Tools for working with project files and knowledge
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {toolRegistry.getToolsByCategory('project').map((tool) => (
+                                <div
+                                    key={tool.metadata.id}
+                                    className="flex items-start justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                                >
+                                    <div className="flex-1 min-w-0 mr-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-medium">{tool.metadata.name}</p>
+                                            <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                                                {tool.metadata.id}
+                                            </code>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {tool.metadata.description}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={isToolEnabled(tool.metadata.id)}
+                                        onCheckedChange={() => toggleTool(tool.metadata.id)}
+                                    />
+                                </div>
+                            ))}
+                            {toolRegistry.getToolsByCategory('project').length === 0 && (
+                                <div className="text-center py-8">
+                                    <p className="text-muted-foreground mb-2">
+                                        No project tools available yet
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Coming soon: File search, RAG, and more
+                                    </p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Filesystem Tools */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Filesystem Tools</CardTitle>
+                            <CardDescription>
+                                Tools for accessing and managing files
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {toolRegistry.getToolsByCategory('filesystem').map((tool) => (
+                                <div
+                                    key={tool.metadata.id}
+                                    className="flex items-start justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                                >
+                                    <div className="flex-1 min-w-0 mr-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <p className="text-sm font-medium">{tool.metadata.name}</p>
+                                            <code className="text-xs px-1.5 py-0.5 bg-muted rounded">
+                                                {tool.metadata.id}
+                                            </code>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {tool.metadata.description}
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={isToolEnabled(tool.metadata.id)}
+                                        onCheckedChange={() => toggleTool(tool.metadata.id)}
+                                    />
+                                </div>
+                            ))}
+                            {toolRegistry.getToolsByCategory('filesystem').length === 0 && (
+                                <div className="text-center py-8">
+                                    <p className="text-muted-foreground mb-2">
+                                        No filesystem tools available yet
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Coming soon: File operations and management
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

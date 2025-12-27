@@ -9,6 +9,8 @@ import { conversationPersistence } from "../services/conversationPersistenceServ
 import type { LocalConversation } from "../types/electron";
 import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
 import { loadAssetAsBlob } from "@/utils/fileUtils";
+import { toolExecutor } from "@/services/toolExecutor";
+import type { ToolCall } from "@/types/tools";
 
 /**
  * Prepares conversation history for API submission
@@ -163,7 +165,9 @@ function normalizeContentForAPI(content: MessageContent): MessageContent {
 function getSystemPromptForConversation(conversation: Conversation): string {
   // If conversation has a project, use project instructions (priority 1)
   if (conversation.projectId) {
-    const project = useProjectStore.getState().getProject(conversation.projectId);
+    const project = useProjectStore
+      .getState()
+      .getProject(conversation.projectId);
     if (project?.instructions && project.instructions.trim()) {
       console.log(`📋 Using project instructions for: ${project.name}`);
       return project.instructions.trim();
@@ -173,13 +177,13 @@ function getSystemPromptForConversation(conversation: Conversation): string {
   // Fall back to global system prompt (priority 2)
   const globalPrompt = useSettingsStore.getState().systemPrompt;
   if (globalPrompt && globalPrompt.trim()) {
-    console.log('📋 Using global system prompt');
+    console.log("📋 Using global system prompt");
     return globalPrompt.trim();
   }
 
   // No system prompt (priority 3)
-  console.log('📋 No system prompt configured');
-  return '';
+  console.log("📋 No system prompt configured");
+  return "";
 }
 
 // Types
@@ -736,6 +740,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         max_tokens: options?.max_tokens ?? 4000,
       };
 
+      // 🔧 Add tool definitions if any tools are enabled
+      const { enabledTools } = useSettingsStore.getState();
+      if (enabledTools.length > 0) {
+        // 🛡️ Check if model supports standard tool calling
+        // Gemini models require special "thought_signature" format that we don't support yet
+        const isGeminiModel = model.includes("google/gemini");
+        
+        if (!isGeminiModel) {
+          const toolDefinitions = toolExecutor.getToolDefinitions(enabledTools);
+          if (toolDefinitions.length > 0) {
+            requestParams.tools = toolDefinitions;
+            console.log(
+              `🔧 Added ${toolDefinitions.length} tool(s) to request:`,
+              toolDefinitions.map((t) => t.function.name)
+            );
+          }
+        } else {
+          console.log(
+            "⚠️ Tool calling disabled for Gemini (requires thought_signature support)"
+          );
+        }
+      }
+
       // Add thinking/reasoning parameters based on model capability
       const thinkingCapability = supportsThinking(model);
 
@@ -787,6 +814,193 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               assistantMessageId,
               thinking
             );
+          },
+          onToolCalls: async (toolCalls, finishReason) => {
+            // 🔧 STEP 4: Execute tools and continue conversation
+            console.log(
+              `🔧 Received ${toolCalls.length} tool call(s) from model`
+            );
+
+            try {
+              // Execute all tools
+              console.log("🔧 Executing tools...");
+              const toolResults =
+                await toolExecutor.executeToolCalls(toolCalls);
+              console.log("✅ Tools executed successfully");
+
+              // Get current conversation
+              const currentConv = get().conversations.find(
+                (conv) => conv.id === conversationId
+              );
+              if (!currentConv) throw new Error("Conversation not found");
+
+              // Get system prompt for continuation
+              const systemPrompt = getSystemPromptForConversation(currentConv);
+
+              // 🔧 Build continuation messages with proper OpenRouter format:
+              // 1. System prompt (if exists)
+              // 2. Previous conversation messages
+              // 3. Assistant message with tool_calls (NOT content)
+              // 4. Tool result messages
+              const continuationMessages: any[] = [];
+
+              // Add system prompt if it exists (required for continuation)
+              if (systemPrompt && systemPrompt.trim()) {
+                continuationMessages.push({
+                  role: "system" as const,
+                  content: [{ type: "text", text: systemPrompt }],
+                });
+              }
+
+              // Add previous conversation messages (exclude the last streaming message)
+              continuationMessages.push(
+                ...currentConv.messages.slice(0, -1).map((msg) => ({
+                  role: msg.role,
+                  content: normalizeContentForAPI(msg.content),
+                }))
+              );
+
+              // 🔧 Add assistant message with tool_calls
+              continuationMessages.push({
+                role: "assistant" as const,
+                content: null, // 👍 OpenRouter requires null when using tool_calls
+                tool_calls: toolCalls.map((tc) => ({
+                  id: tc.id,
+                  type: "function" as const,
+                  function: {
+                    name: tc.function.name,
+                    arguments: tc.function.arguments,
+                  },
+                })),
+              });
+
+              // 🔧 Add tool results
+              continuationMessages.push(
+                ...toolResults.map((result) => ({
+                  role: "tool" as const,
+                  tool_call_id: result.tool_call_id,
+                  content: result.content,
+                }))
+              );
+
+              // Build continuation request
+              console.log("🔧 Sending tool results back to model...");
+
+              const continuationParams: any = {
+                model,
+                messages: continuationMessages,
+                temperature: options?.temperature ?? 0.7,
+                max_tokens: options?.max_tokens ?? 4000,
+              };
+
+              // Must include tools in continuation
+              if (requestParams.tools) {
+                continuationParams.tools = requestParams.tools;
+              }
+
+              // 🐛 DEBUG: Log continuation payload
+              console.log(
+                "🔍 Continuation request payload:",
+                JSON.stringify(
+                  {
+                    model: continuationParams.model,
+                    messageCount: continuationParams.messages.length,
+                    messages: continuationParams.messages.map((m: any, i: number) => ({
+                      index: i,
+                      role: m.role,
+                      hasContent: !!m.content,
+                      hasToolCalls: !!m.tool_calls,
+                      tool_call_id: m.tool_call_id,
+                    })),
+                    toolsIncluded: !!continuationParams.tools,
+                  },
+                  null,
+                  2
+                )
+              );
+
+              // Stream final answer into the EXISTING assistant message
+              await sendChatCompletionStream(
+                continuationParams,
+                {
+                  onContent: (chunk) => {
+                    get().updateMessageContent(
+                      conversationId,
+                      assistantMessageId,
+                      chunk
+                    );
+                  },
+                  onThinking: (thinking) => {
+                    get().updateMessageThinking(
+                      conversationId,
+                      assistantMessageId,
+                      thinking
+                    );
+                  },
+                  onToolCalls: async () => {
+                    // Recursive tool calling (model wants MORE tools)
+                    console.warn(
+                      "⚠️ Nested tool calls detected but not yet supported"
+                    );
+                  },
+                  onComplete: (usage) => {
+                    const inputCost = calculateCost(
+                      usage.prompt_tokens,
+                      model,
+                      false
+                    );
+                    const outputCost = calculateCost(
+                      usage.completion_tokens,
+                      model,
+                      true
+                    );
+                    const totalCost = inputCost + outputCost;
+
+                    get().finalizeMessage(
+                      conversationId,
+                      assistantMessageId,
+                      usage.completion_tokens,
+                      totalCost
+                    );
+                    set({ isLoading: false, currentAbortController: null });
+                    conversationPersistence.markDirty(conversationId);
+                  },
+                  onError: (error) => {
+                    set({
+                      isLoading: false,
+                      error: error.message,
+                      currentAbortController: null,
+                    });
+                    console.error("Tool continuation error:", error);
+
+                    // Remove failed message
+                    set((state) => ({
+                      conversations: state.conversations.map((conv) =>
+                        conv.id === conversationId
+                          ? {
+                              ...conv,
+                              messages: conv.messages.filter(
+                                (msg) => msg.id !== assistantMessageId
+                              ),
+                            }
+                          : conv
+                      ),
+                    }));
+                  },
+                },
+                abortController.signal
+              );
+            } catch (error) {
+              console.error("Failed to execute tools:", error);
+              set({
+                isLoading: false,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Tool execution failed",
+                currentAbortController: null,
+              });
+            }
           },
           onComplete: (usage) => {
             const inputCost = calculateCost(usage.prompt_tokens, model, false);

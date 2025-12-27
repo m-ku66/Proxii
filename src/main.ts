@@ -3,15 +3,18 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import started from "electron-squirrel-startup";
 import { ConversationFileService } from "./services/conversationFileService";
+import { ProjectFileService } from "./services/projectFileService";
 import type { Conversation } from "./preload";
+import type { LocalProject } from "./types/project";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
 
-// Initialize conversation file service
+// Initialize file services
 const conversationService = new ConversationFileService();
+const projectService = new ProjectFileService();
 
 const createWindow = () => {
   // Create the browser window.
@@ -59,14 +62,18 @@ ipcMain.handle("conversations:save", async (_, conversation: Conversation) => {
   }
 });
 
-ipcMain.handle("conversations:delete", async (_, conversationId: string) => {
-  try {
-    await conversationService.deleteConversation(conversationId);
-  } catch (error) {
-    console.error("Failed to delete conversation:", error);
-    throw error;
+ipcMain.handle(
+  "conversations:delete",
+  async (_, conversationId: string, projectId?: string | null) => {
+    try {
+      // Pass projectId to the file service so it knows exactly where to look
+      await conversationService.deleteConversation(conversationId, projectId);
+    } catch (error) {
+      console.error("Failed to delete conversation:", error);
+      throw error;
+    }
   }
-});
+);
 
 ipcMain.handle(
   "conversations:export",
@@ -125,23 +132,66 @@ ipcMain.handle("app:open-conversations-folder", async () => {
   await shell.openPath(conversationsPath);
 });
 
+// IPC Handlers for project management
+ipcMain.handle("projects:load-all", async () => {
+  try {
+    return await projectService.loadAllProjects();
+  } catch (error) {
+    console.error("Failed to load projects:", error);
+    return [];
+  }
+});
+
+ipcMain.handle("projects:save", async (_, project: LocalProject) => {
+  try {
+    await projectService.saveProject(project);
+  } catch (error) {
+    console.error("Failed to save project:", error);
+    throw error;
+  }
+});
+
+ipcMain.handle("projects:delete", async (_, projectId: string) => {
+  try {
+    await projectService.deleteProject(projectId);
+  } catch (error) {
+    console.error("Failed to delete project:", error);
+    throw error;
+  }
+});
+
+ipcMain.handle("app:get-projects-path", async () => {
+  return projectService.getProjectsPath();
+});
+
+ipcMain.handle("app:open-projects-folder", async () => {
+  const projectsPath = projectService.getProjectsPath();
+  await shell.openPath(projectsPath);
+});
+
 // Save an asset file to conversation's asset directory
 ipcMain.handle(
   "assets:save",
-  async (_, conversationId: string, filename: string, buffer: ArrayBuffer) => {
+  async (
+    _,
+    conversationId: string,
+    filename: string,
+    buffer: ArrayBuffer,
+    projectId?: string | null
+  ) => {
     try {
-      const conversationsPath = conversationService.getConversationsPath();
-      const assetsDir = path.join(conversationsPath, conversationId, "assets");
-
-      // Ensure assets directory exists
-      await fs.mkdir(assetsDir, { recursive: true });
+      // Get or create the assets directory with projectId for correct routing
+      const assetsDir = await conversationService.getOrCreateAssetsDir(
+        conversationId,
+        projectId
+      );
 
       // Write the file
       const filePath = path.join(assetsDir, filename);
       await fs.writeFile(filePath, Buffer.from(buffer));
 
       console.log(
-        `💾 Saved asset: ${filename} for conversation ${conversationId}`
+        `💾 Saved asset: ${filename} for conversation ${conversationId} ${projectId ? `(project: ${projectId})` : "(global)"}`
       );
     } catch (error) {
       console.error("Failed to save asset:", error);
@@ -153,15 +203,19 @@ ipcMain.handle(
 // Load an asset file from conversation's asset directory
 ipcMain.handle(
   "assets:load",
-  async (_, conversationId: string, filename: string) => {
+  async (
+    _,
+    conversationId: string,
+    filename: string,
+    projectId?: string | null
+  ) => {
     try {
-      const conversationsPath = conversationService.getConversationsPath();
-      const filePath = path.join(
-        conversationsPath,
+      // Get the assets directory with projectId for correct routing
+      const assetsDir = await conversationService.getOrCreateAssetsDir(
         conversationId,
-        "assets",
-        filename
+        projectId
       );
+      const filePath = path.join(assetsDir, filename);
 
       const buffer = await fs.readFile(filePath);
       return buffer.buffer; // Return ArrayBuffer
@@ -175,15 +229,19 @@ ipcMain.handle(
 // Delete a specific asset file
 ipcMain.handle(
   "assets:delete",
-  async (_, conversationId: string, filename: string) => {
+  async (
+    _,
+    conversationId: string,
+    filename: string,
+    projectId?: string | null
+  ) => {
     try {
-      const conversationsPath = conversationService.getConversationsPath();
-      const filePath = path.join(
-        conversationsPath,
+      // Get the assets directory with projectId for correct routing
+      const assetsDir = await conversationService.getOrCreateAssetsDir(
         conversationId,
-        "assets",
-        filename
+        projectId
       );
+      const filePath = path.join(assetsDir, filename);
 
       await fs.unlink(filePath);
       console.log(
@@ -200,27 +258,34 @@ ipcMain.handle(
 );
 
 // Delete all assets for a conversation
-ipcMain.handle("assets:delete-all", async (_, conversationId: string) => {
-  try {
-    const conversationsPath = conversationService.getConversationsPath();
-    const assetsDir = path.join(conversationsPath, conversationId, "assets");
+ipcMain.handle(
+  "assets:delete-all",
+  async (_, conversationId: string, projectId?: string | null) => {
+    try {
+      // Get the assets directory with projectId for correct routing
+      const assetsDir = await conversationService.getOrCreateAssetsDir(
+        conversationId,
+        projectId
+      );
 
-    await fs.rm(assetsDir, { recursive: true, force: true });
-    console.log(`🗑️ Deleted all assets for conversation ${conversationId}`);
-  } catch (error) {
-    console.error("Failed to delete conversation assets:", error);
-    // Don't throw if directory doesn't exist
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
+      await fs.rm(assetsDir, { recursive: true, force: true });
+      console.log(`🗑️ Deleted all assets for conversation ${conversationId}`);
+    } catch (error) {
+      console.error("Failed to delete conversation assets:", error);
+      // Don't throw if directory doesn't exist
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
   }
-});
+);
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 app.on("ready", async () => {
-  // Ensure conversations directory exists
+  // Ensure directories exist
   await conversationService.ensureConversationsDirectory();
+  await projectService.ensureProjectsDirectory();
   createWindow();
 });
 

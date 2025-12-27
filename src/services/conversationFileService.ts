@@ -5,6 +5,7 @@ import type { Conversation } from "../preload";
 
 export class ConversationFileService {
   private conversationsPath: string;
+  private projectsPath: string;
 
   constructor() {
     // Use the user's Documents folder for conversations
@@ -14,6 +15,14 @@ export class ConversationFileService {
       "Proxii",
       "conversations"
     );
+
+    // Projects path for project-scoped conversations
+    // ~/Documents/Proxii/projects/
+    this.projectsPath = path.join(
+      app.getPath("documents"),
+      "Proxii",
+      "projects"
+    );
   }
 
   /**
@@ -21,6 +30,42 @@ export class ConversationFileService {
    */
   getConversationsPath(): string {
     return this.conversationsPath;
+  }
+
+  /**
+   * Get the conversation directory path based on projectId
+   * - If projectId is null: /conversations/[conversationId]/
+   * - If projectId exists: /projects/[projectId]/conversations/[conversationId]/
+   */
+  private getConversationDir(
+    conversationId: string,
+    projectId?: string | null
+  ): string {
+    if (projectId) {
+      // Project-scoped conversation
+      return path.join(
+        this.projectsPath,
+        projectId,
+        "conversations",
+        conversationId
+      );
+    } else {
+      // Global conversation
+      return path.join(this.conversationsPath, conversationId);
+    }
+  }
+
+  /**
+   * Get the base conversations directory for a project (or global)
+   * - If projectId is null: /conversations/
+   * - If projectId exists: /projects/[projectId]/conversations/
+   */
+  private getConversationsBaseDir(projectId?: string | null): string {
+    if (projectId) {
+      return path.join(this.projectsPath, projectId, "conversations");
+    } else {
+      return this.conversationsPath;
+    }
   }
 
   /**
@@ -40,12 +85,84 @@ export class ConversationFileService {
 
   /**
    * Load all conversations from the conversations directory
+   * This includes:
+   * - Global conversations from /conversations/
+   * - Project-scoped conversations from /projects/projectId/conversations/
    */
   async loadAllConversations(): Promise<Conversation[]> {
     try {
-      await this.ensureConversationsDirectory();
+      const allConversations: Conversation[] = [];
 
-      const entries = await fs.readdir(this.conversationsPath, {
+      // Load global conversations
+      const globalConversations = await this.loadConversationsFromDir(
+        this.conversationsPath,
+        null
+      );
+      allConversations.push(...globalConversations);
+
+      // Load project-scoped conversations
+      try {
+        const projectDirs = await fs.readdir(this.projectsPath, {
+          withFileTypes: true,
+        });
+        const projectFolders = projectDirs.filter((entry) =>
+          entry.isDirectory()
+        );
+
+        for (const projectFolder of projectFolders) {
+          const projectId = projectFolder.name;
+          const projectConversationsPath = path.join(
+            this.projectsPath,
+            projectId,
+            "conversations"
+          );
+
+          // Check if conversations directory exists for this project
+          try {
+            await fs.access(projectConversationsPath);
+            const projectConversations = await this.loadConversationsFromDir(
+              projectConversationsPath,
+              projectId
+            );
+            allConversations.push(...projectConversations);
+          } catch {
+            // No conversations directory for this project, skip
+            continue;
+          }
+        }
+      } catch (error) {
+        // Projects directory doesn't exist yet, that's fine
+        console.log(
+          "No projects directory found, skipping project conversations"
+        );
+      }
+
+      // Sort by updatedAt (most recent first)
+      allConversations.sort(
+        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+      );
+
+      console.log(
+        `💬 Loaded ${allConversations.length} conversations (global + project-scoped)`
+      );
+      return allConversations;
+    } catch (error) {
+      console.error("Failed to load conversations:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Helper: Load conversations from a specific directory
+   */
+  private async loadConversationsFromDir(
+    dirPath: string,
+    projectId: string | null
+  ): Promise<Conversation[]> {
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+
+      const entries = await fs.readdir(dirPath, {
         withFileTypes: true,
       });
       const conversationDirs = entries.filter((entry) => entry.isDirectory());
@@ -55,7 +172,7 @@ export class ConversationFileService {
       for (const dir of conversationDirs) {
         try {
           const conversationPath = path.join(
-            this.conversationsPath,
+            dirPath,
             dir.name,
             "conversation.json"
           );
@@ -70,6 +187,9 @@ export class ConversationFileService {
             timestamp: new Date(msg.timestamp),
           }));
 
+          // Ensure projectId is set correctly
+          conversation.projectId = projectId;
+
           conversations.push(conversation);
         } catch (fileError) {
           console.error(
@@ -80,31 +200,28 @@ export class ConversationFileService {
         }
       }
 
-      // Sort by updatedAt (most recent first)
-      conversations.sort(
-        (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
-      );
-
-      console.log(`Loaded ${conversations.length} conversations`);
       return conversations;
     } catch (error) {
-      console.error("Failed to load conversations:", error);
+      console.error(`Failed to load conversations from ${dirPath}:`, error);
       return [];
     }
   }
 
   /**
    * Save a conversation to disk
+   * Routes to correct location based on projectId:
+   * - Global (projectId: null) → /conversations/
+   * - Project-scoped → /projects/[projectId]/conversations/
    */
   async saveConversation(conversation: Conversation): Promise<void> {
     try {
-      await this.ensureConversationsDirectory();
-
-      // Create conversation folder
-      const conversationDir = path.join(
-        this.conversationsPath,
-        conversation.id
+      // Get the correct directory based on projectId
+      const conversationDir = this.getConversationDir(
+        conversation.id,
+        conversation.projectId
       );
+
+      // Ensure parent directory exists
       await fs.mkdir(conversationDir, { recursive: true });
 
       // Save JSON inside the folder
@@ -112,7 +229,9 @@ export class ConversationFileService {
       const content = JSON.stringify(conversation, null, 2);
 
       await fs.writeFile(filePath, content, "utf-8");
-      console.log(`Saved conversation: ${conversation.id}`);
+      console.log(
+        `💾 Saved conversation: ${conversation.id} ${conversation.projectId ? `(project: ${conversation.projectId})` : "(global)"}`
+      );
     } catch (error) {
       console.error(`Failed to save conversation ${conversation.id}:`, error);
       throw error;
@@ -121,13 +240,53 @@ export class ConversationFileService {
 
   /**
    * Delete a conversation file
+   * Now accepts optional projectId to know exactly where to delete from
    */
-  async deleteConversation(conversationId: string): Promise<void> {
+  async deleteConversation(
+    conversationId: string,
+    projectId?: string | null
+  ): Promise<void> {
     try {
-      // Delete the entire conversation folder (includes JSON + assets)
-      const conversationDir = path.join(this.conversationsPath, conversationId);
-      await fs.rm(conversationDir, { recursive: true, force: true });
-      console.log(`Deleted conversation folder: ${conversationId}`);
+      // If projectId is provided, we know exactly where to delete from
+      if (projectId) {
+        const conversationDir = path.join(
+          this.projectsPath,
+          projectId,
+          "conversations",
+          conversationId
+        );
+        await fs.rm(conversationDir, { recursive: true, force: true });
+        console.log(
+          `🗑️ Deleted project conversation: ${conversationId} (project: ${projectId})`
+        );
+
+        // Clean up empty parent "conversations" folder if it's now empty
+        const conversationsDir = path.join(
+          this.projectsPath,
+          projectId,
+          "conversations"
+        );
+        try {
+          const remainingConversations = await fs.readdir(conversationsDir);
+          if (remainingConversations.length === 0) {
+            await fs.rmdir(conversationsDir);
+            console.log(
+              `🧺 Cleaned up empty conversations folder for project ${projectId}`
+            );
+          }
+        } catch (error) {
+          // Ignore errors when cleaning up parent folder
+        }
+        return;
+      }
+
+      // No projectId - delete from global conversations
+      const globalConversationDir = path.join(
+        this.conversationsPath,
+        conversationId
+      );
+      await fs.rm(globalConversationDir, { recursive: true, force: true });
+      console.log(`🗑️ Deleted global conversation: ${conversationId}`);
     } catch (error) {
       console.error(`Failed to delete conversation ${conversationId}:`, error);
       throw error;
@@ -241,5 +400,91 @@ export class ConversationFileService {
     }
 
     return text;
+  }
+
+  /**
+   * Get the assets directory path for a conversation
+   * Searches both global and project locations
+   * Returns null if not found
+   */
+  private async getAssetsDir(conversationId: string): Promise<string | null> {
+    // Check global first
+    const globalAssetsDir = path.join(
+      this.conversationsPath,
+      conversationId,
+      "assets"
+    );
+    try {
+      await fs.access(globalAssetsDir);
+      return globalAssetsDir;
+    } catch {
+      // Not in global
+    }
+
+    // Check in projects
+    try {
+      const projectDirs = await fs.readdir(this.projectsPath, {
+        withFileTypes: true,
+      });
+      const projectFolders = projectDirs.filter((entry) => entry.isDirectory());
+
+      for (const projectFolder of projectFolders) {
+        const projectId = projectFolder.name;
+        const projectAssetsDir = path.join(
+          this.projectsPath,
+          projectId,
+          "conversations",
+          conversationId,
+          "assets"
+        );
+
+        try {
+          await fs.access(projectAssetsDir);
+          return projectAssetsDir;
+        } catch {
+          // Not in this project
+        }
+      }
+    } catch {
+      // Projects directory doesn't exist
+    }
+
+    // Not found anywhere
+    return null;
+  }
+
+  /**
+   * Get the assets directory path for a conversation
+   * Creates in the correct location based on projectId
+   * - If projectId provided: /projects/{projectId}/conversations/{conversationId}/assets/
+   * - If no projectId: /conversations/{conversationId}/assets/
+   */
+  async getOrCreateAssetsDir(
+    conversationId: string,
+    projectId?: string | null
+  ): Promise<string> {
+    let assetsDir: string;
+
+    if (projectId) {
+      // Project-scoped assets
+      assetsDir = path.join(
+        this.projectsPath,
+        projectId,
+        "conversations",
+        conversationId,
+        "assets"
+      );
+    } else {
+      // Global assets
+      assetsDir = path.join(
+        this.conversationsPath,
+        conversationId,
+        "assets"
+      );
+    }
+
+    // Ensure the directory exists
+    await fs.mkdir(assetsDir, { recursive: true });
+    return assetsDir;
   }
 }

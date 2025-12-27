@@ -1,5 +1,6 @@
 // Global type declarations for the Electron API exposed via preload script
 import type { MessageFileAttachment } from "./multimodal";
+import type { LocalProject } from "./project";
 
 export interface LocalConversation {
   id: string;
@@ -28,27 +29,36 @@ interface ElectronAPI {
   conversations: {
     loadAll: () => Promise<Conversation[]>;
     save: (conversation: Conversation) => Promise<void>;
-    delete: (conversationId: string) => Promise<void>;
+    delete: (conversationId: string, projectId?: string | null) => Promise<void>;
     export: (
       conversation: Conversation,
       format: "json" | "markdown" | "txt"
     ) => Promise<string | null>;
   };
 
+  projects: {
+    loadAll: () => Promise<LocalProject[]>;
+    save: (project: LocalProject) => Promise<void>;
+    delete: (projectId: string) => Promise<void>;
+  };
+
   app: {
     getConversationsPath: () => Promise<string>;
     openConversationsFolder: () => Promise<void>;
+    getProjectsPath: () => Promise<string>;
+    openProjectsFolder: () => Promise<void>;
   };
 
   assets: {
     save: (
       conversationId: string,
       filename: string,
-      buffer: ArrayBuffer
+      buffer: ArrayBuffer,
+      projectId?: string | null
     ) => Promise<void>;
-    load: (conversationId: string, filename: string) => Promise<ArrayBuffer>;
-    delete: (conversationId: string, filename: string) => Promise<void>;
-    deleteAll: (conversationId: string) => Promise<void>;
+    load: (conversationId: string, filename: string, projectId?: string | null) => Promise<ArrayBuffer>;
+    delete: (conversationId: string, filename: string, projectId?: string | null) => Promise<void>;
+    deleteAll: (conversationId: string, projectId?: string | null) => Promise<void>;
   };
 }
 

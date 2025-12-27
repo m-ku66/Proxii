@@ -173,7 +173,8 @@ export async function saveAsset(
   conversationId: string,
   file: File,
   messageId: string,
-  index?: number
+  index?: number,
+  projectId?: string | null
 ): Promise<string> {
   const filename = generateAssetFilename(file.name, messageId, index); // Pass index
   const assetPath = getAssetPath(filename);
@@ -181,8 +182,8 @@ export async function saveAsset(
   // Convert file to buffer for IPC
   const buffer = await file.arrayBuffer();
 
-  // IPC call to main process to save file
-  await window.electronAPI.assets.save(conversationId, filename, buffer);
+  // IPC call to main process to save file with projectId for correct routing
+  await window.electronAPI.assets.save(conversationId, filename, buffer, projectId);
 
   return assetPath; // Return relative path like "assets/image_123.jpg"
 }
@@ -192,13 +193,14 @@ export async function saveAsset(
  */
 export async function loadAssetAsBlob(
   conversationId: string,
-  assetPath: string
+  assetPath: string,
+  projectId?: string | null
 ): Promise<string> {
   // Extract filename from path (remove "assets/" prefix)
   const filename = assetPath.replace("assets/", "");
 
-  // IPC call to main process to read file
-  const buffer = await window.electronAPI.assets.load(conversationId, filename);
+  // IPC call to main process to read file with projectId for correct routing
+  const buffer = await window.electronAPI.assets.load(conversationId, filename, projectId);
 
   // Create blob URL from buffer
   const blob = new Blob([buffer]);
@@ -210,19 +212,21 @@ export async function loadAssetAsBlob(
  */
 export async function deleteAsset(
   conversationId: string,
-  assetPath: string
+  assetPath: string,
+  projectId?: string | null
 ): Promise<void> {
   const filename = assetPath.replace("assets/", "");
-  await window.electronAPI.assets.delete(conversationId, filename);
+  await window.electronAPI.assets.delete(conversationId, filename, projectId);
 }
 
 /**
  * Deletes all assets for a conversation
  */
 export async function deleteConversationAssets(
-  conversationId: string
+  conversationId: string,
+  projectId?: string | null
 ): Promise<void> {
-  await window.electronAPI.assets.deleteAll(conversationId);
+  await window.electronAPI.assets.deleteAll(conversationId, projectId);
 }
 
 /**
@@ -231,12 +235,13 @@ export async function deleteConversationAssets(
  */
 export async function restoreFilesFromAttachments(
   conversationId: string,
-  attachments: MessageFileAttachment[]
+  attachments: MessageFileAttachment[],
+  projectId?: string | null
 ): Promise<File[]> {
   return Promise.all(
     attachments.map(async (attachment) => {
-      // Load the asset from disk
-      const blobUrl = await loadAssetAsBlob(conversationId, attachment.url);
+      // Load the asset from disk with projectId
+      const blobUrl = await loadAssetAsBlob(conversationId, attachment.url, projectId);
 
       // Fetch the blob from the blob URL
       const response = await fetch(blobUrl);

@@ -50,7 +50,9 @@ export const Chats = () => {
     });
 
     // Filter conversations based on tab and search, then sort by most recently updated
+    // IMPORTANT: Only show global conversations (exclude project conversations)
     const filteredConversations = conversations
+        .filter((conv) => !conv.projectId) // Exclude conversations that belong to projects
         .filter((conv) => {
             const matchesSearch = conv.title
                 .toLowerCase()

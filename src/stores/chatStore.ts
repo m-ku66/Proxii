@@ -3,6 +3,7 @@ import { calculateMessageMetrics } from "@/utils/tokenUtils";
 import { sendChatCompletionStream } from "@/services/apiService";
 import { useModelStore } from "@/stores/modelStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { calculateCost } from "@/utils/tokenUtils";
 import { conversationPersistence } from "../services/conversationPersistenceService";
 import type { LocalConversation } from "../types/electron";
@@ -150,6 +151,35 @@ function normalizeContentForAPI(content: MessageContent): MessageContent {
 
   // If it's a string, convert to array format for consistency
   return [{ type: "text", text: content }];
+}
+
+/**
+ * Get the appropriate system prompt for a conversation
+ * Priority: Project instructions > Global settings > None
+ *
+ * @param conversation - The conversation to get the system prompt for
+ * @returns The system prompt string (empty if none applies)
+ */
+function getSystemPromptForConversation(conversation: Conversation): string {
+  // If conversation has a project, use project instructions (priority 1)
+  if (conversation.projectId) {
+    const project = useProjectStore.getState().getProject(conversation.projectId);
+    if (project?.instructions && project.instructions.trim()) {
+      console.log(`📋 Using project instructions for: ${project.name}`);
+      return project.instructions.trim();
+    }
+  }
+
+  // Fall back to global system prompt (priority 2)
+  const globalPrompt = useSettingsStore.getState().systemPrompt;
+  if (globalPrompt && globalPrompt.trim()) {
+    console.log('📋 Using global system prompt');
+    return globalPrompt.trim();
+  }
+
+  // No system prompt (priority 3)
+  console.log('📋 No system prompt configured');
+  return '';
 }
 
 // Types
@@ -551,21 +581,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // We need a message ID before saving assets
         const tempMessageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+        // Get the conversation to access projectId
+        const conversation = get().conversations.find(
+          (conv) => conv.id === conversationId
+        );
+
         messageFiles = await Promise.all(
           files.map(async (file, index) => {
             console.log(`🔵 Processing file ${index}:`, file.name);
 
-            // Save file to disk and get the asset path
+            // Save file to disk and get the asset path WITH projectId
             const assetPath = await saveAsset(
               conversationId,
               file,
               tempMessageId,
-              index
+              index,
+              conversation?.projectId // ✅ Pass projectId for correct routing
             );
             console.log(`💾 Saved ${index} to:`, assetPath);
 
-            // Load asset as blob URL for immediate display
-            const blobUrl = await loadAssetAsBlob(conversationId, assetPath);
+            // Load asset as blob URL for immediate display WITH projectId
+            const blobUrl = await loadAssetAsBlob(
+              conversationId,
+              assetPath,
+              conversation?.projectId // ✅ Pass projectId for correct routing
+            );
             console.log(`🔗 Created blob URL ${index}:`, blobUrl);
 
             // Build the attachment metadata with both path and blob URL
@@ -608,14 +648,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Mark as dirty immediately after user sends message
       conversationPersistence.markDirty(conversationId);
 
-      // Get system prompt from settings
-      const systemPrompt = useSettingsStore.getState().systemPrompt;
-
       // Get updated conversation for API
       const conversation = get().conversations.find(
         (conv) => conv.id === conversationId
       );
       if (!conversation) throw new Error("Conversation not found");
+
+      // Get system prompt (project instructions override global settings)
+      const systemPrompt = getSystemPromptForConversation(conversation);
 
       // Prepare messages for API - normalize all content to multimodal format
 
@@ -813,19 +853,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteConversation: async (conversationId) => {
     try {
+      // Get the conversation to access its projectId
+      const conversation = get().conversations.find(
+        (conv) => conv.id === conversationId
+      );
+
+      if (!conversation) {
+        console.warn(`Conversation ${conversationId} not found`);
+        return;
+      }
+
       // Delete all assets for this conversation
       const { deleteConversationAssets } = await import("@/utils/fileUtils");
 
       try {
-        await deleteConversationAssets(conversationId);
+        await deleteConversationAssets(conversationId, conversation.projectId);
         console.log(`🗑️ Deleted all assets for conversation ${conversationId}`);
       } catch (error) {
         console.error("Failed to delete conversation assets:", error);
         // Continue with conversation deletion even if asset cleanup fails
       }
 
-      // Remove conversation JSON from disk
-      await conversationPersistence.deleteConversation(conversationId);
+      // Remove conversation JSON from disk (pass the full conversation)
+      await conversationPersistence.deleteConversation(
+        conversation as LocalConversation
+      );
 
       // Then remove from state
       set((state) => ({
@@ -933,7 +985,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         );
         filesToResend = await restoreFilesFromAttachments(
           conversationId,
-          message.files
+          message.files,
+          conversation.projectId // ✅ Pass projectId for correct routing
         );
         console.log(`📎 Restored ${filesToResend.length} file(s) for resend`);
       }
@@ -1003,8 +1056,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-      // Get system prompt from settings
-      const systemPrompt = useSettingsStore.getState().systemPrompt;
+      // Get system prompt (project instructions override global settings)
+      const systemPrompt = getSystemPromptForConversation(conversation);
 
       // Prepare messages for API (use existing conversation up to this point)
       const apiMessages: Array<{
@@ -1237,8 +1290,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const assistantMessageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       try {
-        // Get system prompt from settings
-        const systemPrompt = useSettingsStore.getState().systemPrompt;
+        // Get system prompt (project instructions override global settings)
+        const systemPrompt = getSystemPromptForConversation(conversation);
 
         // Prepare messages for API (use the updated conversation)
         const apiMessages: Array<{
@@ -1386,9 +1439,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const { deleteAsset } = await import("@/utils/fileUtils");
 
       try {
-        // Delete each asset file
+        // Delete each asset file WITH projectId
         await Promise.all(
-          message.files.map((file) => deleteAsset(conversationId, file.url))
+          message.files.map((file) =>
+            deleteAsset(conversationId, file.url, conversation?.projectId)
+          )
         );
         console.log(
           `🗑️ Deleted ${message.files.length} asset(s) for message ${messageId}`
@@ -1425,10 +1480,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           conv.messages.map(async (msg) => {
             if (!msg.files || msg.files.length === 0) return msg;
 
-            // Convert asset paths to blob URLs
+            // Convert asset paths to blob URLs WITH projectId
             const transformedFiles = await Promise.all(
               msg.files.map(async (file) => {
-                const blobUrl = await loadAssetAsBlob(conv.id, file.url);
+                const blobUrl = await loadAssetAsBlob(
+                  conv.id,
+                  file.url,
+                  conv.projectId // ✅ Pass projectId for correct routing
+                );
                 return { ...file, blobUrl: blobUrl }; // Assign to blobUrl, not url
               })
             );

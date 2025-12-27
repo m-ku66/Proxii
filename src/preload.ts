@@ -3,6 +3,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import { MessageFileAttachment } from "./types/multimodal";
+import type { LocalProject } from "./types/project";
 
 // Define conversation type (matching your existing store)
 export interface Conversation {
@@ -41,10 +42,19 @@ export interface ElectronAPI {
     ) => Promise<string | null>;
   };
 
+  // Project file operations
+  projects: {
+    loadAll: () => Promise<LocalProject[]>;
+    save: (project: LocalProject) => Promise<void>;
+    delete: (projectId: string) => Promise<void>;
+  };
+
   // App lifecycle
   app: {
     getConversationsPath: () => Promise<string>;
     openConversationsFolder: () => Promise<void>;
+    getProjectsPath: () => Promise<string>;
+    openProjectsFolder: () => Promise<void>;
   };
 
   // Asset management
@@ -66,10 +76,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
     loadAll: () => ipcRenderer.invoke("conversations:load-all"),
     save: (conversation: Conversation) =>
       ipcRenderer.invoke("conversations:save", conversation),
-    delete: (conversationId: string) =>
-      ipcRenderer.invoke("conversations:delete", conversationId),
+    delete: (conversationId: string, projectId?: string | null) =>
+      ipcRenderer.invoke("conversations:delete", conversationId, projectId),
     export: (conversation: Conversation, format: "json" | "markdown" | "txt") =>
       ipcRenderer.invoke("conversations:export", conversation, format),
+  },
+
+  projects: {
+    loadAll: () => ipcRenderer.invoke("projects:load-all"),
+    save: (project: LocalProject) =>
+      ipcRenderer.invoke("projects:save", project),
+    delete: (projectId: string) =>
+      ipcRenderer.invoke("projects:delete", projectId),
   },
 
   app: {
@@ -77,16 +95,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("app:get-conversations-path"),
     openConversationsFolder: () =>
       ipcRenderer.invoke("app:open-conversations-folder"),
+    getProjectsPath: () =>
+      ipcRenderer.invoke("app:get-projects-path"),
+    openProjectsFolder: () =>
+      ipcRenderer.invoke("app:open-projects-folder"),
   },
 
   assets: {
-    save: (conversationId: string, filename: string, buffer: ArrayBuffer) =>
-      ipcRenderer.invoke("assets:save", conversationId, filename, buffer),
-    load: (conversationId: string, filename: string) =>
-      ipcRenderer.invoke("assets:load", conversationId, filename),
-    delete: (conversationId: string, filename: string) =>
-      ipcRenderer.invoke("assets:delete", conversationId, filename),
-    deleteAll: (conversationId: string) =>
-      ipcRenderer.invoke("assets:delete-all", conversationId),
+    save: (conversationId: string, filename: string, buffer: ArrayBuffer, projectId?: string | null) =>
+      ipcRenderer.invoke("assets:save", conversationId, filename, buffer, projectId),
+    load: (conversationId: string, filename: string, projectId?: string | null) =>
+      ipcRenderer.invoke("assets:load", conversationId, filename, projectId),
+    delete: (conversationId: string, filename: string, projectId?: string | null) =>
+      ipcRenderer.invoke("assets:delete", conversationId, filename, projectId),
+    deleteAll: (conversationId: string, projectId?: string | null) =>
+      ipcRenderer.invoke("assets:delete-all", conversationId, projectId),
   },
 } satisfies ElectronAPI);

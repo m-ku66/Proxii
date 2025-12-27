@@ -122,6 +122,9 @@ export const ChatRoom = () => {
         max_tokens: 4000
     });
 
+    // ✅ Get theme at the top level of the component
+    const theme = useUIStore(state => state.theme);
+
     const {
         conversations,
         activeConversationId,
@@ -403,7 +406,7 @@ export const ChatRoom = () => {
                                                                         alt={file.name}
                                                                         className="w-full h-32 object-cover"
                                                                     />
-                                                                    <div className={`absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs truncate ${useUIStore().theme === 'dark' ? 'text-primary' : "text-primary-foreground"}`}>
+                                                                    <div className={`absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-xs truncate ${theme === 'dark' ? 'text-primary' : "text-primary-foreground"}`}>
                                                                         {file.name}
                                                                     </div>
                                                                 </div>

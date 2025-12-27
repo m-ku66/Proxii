@@ -13,7 +13,9 @@ import { initializePricing } from "./tokenUtils";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useModelStore } from "@/stores/modelStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { conversationPersistence } from "@/services/conversationPersistenceService";
+import { projectPersistence } from "@/services/projectPersistenceService";
 
 /**
  * Initialize the app
@@ -23,12 +25,17 @@ export async function initializeApp(): Promise<void> {
   console.log("Initializing Proxii...");
 
   try {
-    // ✨ STEP 1: Initialize conversation persistence first
+    // ✨ STEP 1: Initialize projects first (they exist independently)
+    console.log("Initializing projects...");
+    await initializeProjects();
+    console.log("✓ Projects initialized");
+
+    // ✨ STEP 2: Initialize conversation persistence (depends on projects for scoping)
     console.log("Initializing conversation persistence...");
     await initializeConversations();
     console.log("✓ Conversation persistence initialized");
 
-    // ✨ STEP 2: Get API key and initialize pricing/models
+    // ✨ STEP 3: Get API key and initialize pricing/models
     const apiKey = useSettingsStore.getState().openRouterApiKey;
 
     if (apiKey) {
@@ -53,7 +60,7 @@ export async function initializeApp(): Promise<void> {
       );
     }
 
-    // ✨ STEP 3: Set up auto-save system
+    // ✨ STEP 4: Set up auto-save system
     setupAutoSave();
     console.log("✓ Auto-save system initialized");
 
@@ -63,13 +70,14 @@ export async function initializeApp(): Promise<void> {
     // Continue with fallback pricing
     console.log("⚠ Continuing with fallback pricing");
 
-    // Still try to initialize conversations even if other stuff fails
+    // Still try to initialize persistence even if other stuff fails
     try {
+      await initializeProjects();
       await initializeConversations();
       setupAutoSave();
-      console.log("✓ Conversation system initialized despite other errors");
-    } catch (convError) {
-      console.error("Failed to initialize conversations:", convError);
+      console.log("✓ Persistence system initialized despite other errors");
+    } catch (persistError) {
+      console.error("Failed to initialize persistence:", persistError);
     }
   }
 }
@@ -110,33 +118,80 @@ async function initializeConversations(): Promise<void> {
 }
 
 /**
+ * Initialize project persistence and load saved projects
+ */
+async function initializeProjects(): Promise<void> {
+  try {
+    // Initialize the persistence service
+    await projectPersistence.initialize();
+
+    // Load all projects from disk
+    const savedProjects = await projectPersistence.loadAllProjects();
+
+    if (savedProjects.length > 0) {
+      // Load projects into the store
+      useProjectStore.getState().setProjectsFromDisk(savedProjects);
+
+      console.log(`📂 Loaded ${savedProjects.length} projects from disk`);
+    } else {
+      console.log("📂 No saved projects found");
+    }
+  } catch (error) {
+    console.error("Failed to initialize projects:", error);
+    // Don't throw - let the app continue without persistence
+  }
+}
+
+/**
  * Set up auto-save functionality
  */
 function setupAutoSave(): void {
   try {
+    // Set up periodic auto-save (every 30 seconds)
+    const autoSaveInterval = setInterval(async () => {
+      try {
+        await Promise.all([
+          useChatStore.getState().saveAllDirtyConversations(),
+          useProjectStore.getState().saveAllDirtyProjects(),
+        ]);
+      } catch (error) {
+        console.error("Periodic auto-save failed:", error);
+      }
+    }, 30000); // 30 seconds
+
+    // Clean up interval on page unload
+    window.addEventListener("beforeunload", () => {
+      clearInterval(autoSaveInterval);
+    });
+
     // Listen for auto-save events triggered by the persistence service
     window.addEventListener("proxii-autosave", async () => {
       try {
         console.log("🔄 Auto-save triggered...");
-        await useChatStore.getState().saveAllDirtyConversations();
+
+        // Save both conversations and projects
+        await Promise.all([
+          useChatStore.getState().saveAllDirtyConversations(),
+          useProjectStore.getState().saveAllDirtyProjects(),
+        ]);
+
         console.log("✓ Auto-save completed");
       } catch (error) {
         console.error("Auto-save failed:", error);
       }
     });
 
-    // Save all dirty conversations before page unload
+    // Save all dirty conversations and projects before page unload
     window.addEventListener("beforeunload", async (event) => {
       try {
-        console.log(event, ": 💾 Saving conversations before app close...");
-
-        // Get all conversations and save dirty ones
-        // Note: This is best effort - browser may not wait for async operations
-        const { saveAllDirtyConversations } = useChatStore.getState();
+        console.log(event, ": 💾 Saving data before app close...");
 
         // Quick save attempt with timeout
         await Promise.race([
-          saveAllDirtyConversations(),
+          Promise.all([
+            useChatStore.getState().saveAllDirtyConversations(),
+            useProjectStore.getState().saveAllDirtyProjects(),
+          ]),
           new Promise((resolve) => setTimeout(resolve, 1000)), // Max 1 second
         ]);
 
@@ -146,7 +201,7 @@ function setupAutoSave(): void {
       }
     });
 
-    console.log("Auto-save event listeners registered");
+    console.log("Auto-save event listeners registered (30s interval)");
   } catch (error) {
     console.error("Failed to set up auto-save:", error);
   }
@@ -241,6 +296,42 @@ export async function openConversationsFolder(): Promise<void> {
     await useChatStore.getState().openConversationsFolder();
   } catch (error) {
     console.error("Failed to open conversations folder:", error);
+    throw error;
+  }
+}
+
+/**
+ * ✨ NEW: Manual save all projects (useful for testing or manual triggers)
+ */
+export async function saveAllProjects(): Promise<void> {
+  try {
+    console.log("💾 Manually saving all projects...");
+    await useProjectStore.getState().saveAllDirtyProjects();
+    console.log("✓ Manual project save completed");
+  } catch (error) {
+    console.error("Manual project save failed:", error);
+    throw error;
+  }
+}
+
+/**
+ * ✨ NEW: Open the projects folder (Electron only)
+ */
+export async function openProjectsFolder(): Promise<void> {
+  try {
+    if (!isElectron()) {
+      console.warn("Cannot open folder: not running in Electron");
+      return;
+    }
+
+    if (!window.electronAPI?.app?.openProjectsFolder) {
+      console.warn("Projects folder API not available");
+      return;
+    }
+
+    await window.electronAPI.app.openProjectsFolder();
+  } catch (error) {
+    console.error("Failed to open projects folder:", error);
     throw error;
   }
 }

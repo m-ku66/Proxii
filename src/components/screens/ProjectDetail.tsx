@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 
 export const ProjectDetail = () => {
     const { getActiveProject, updateProject, deleteProject, toggleStar } = useProjectStore();
-    const { conversations, getConversationsByProject, setActiveConversation, createNewChat, sendMessage, deleteConversation } = useChatStore();
+    const { conversations, getConversationsByProject, setActiveConversation, createNewChat, sendMessage, deleteConversation, renameConversation, toggleStar: toggleConversationStar } = useChatStore();
     const { setActiveScreen, theme } = useUIStore();
 
     const project = getActiveProject();
@@ -32,6 +32,7 @@ export const ProjectDetail = () => {
     // Local state for editing
     const [editedInstructions, setEditedInstructions] = useState('');
     const [hasChanges, setHasChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Edit dialog state
     const [editDialog, setEditDialog] = useState<{
@@ -42,6 +43,17 @@ export const ProjectDetail = () => {
         isOpen: false,
         name: '',
         description: '',
+    });
+
+    // Rename conversation dialog state
+    const [renameConvDialog, setRenameConvDialog] = useState<{
+        isOpen: boolean;
+        conversationId: string;
+        currentTitle: string;
+    }>({
+        isOpen: false,
+        conversationId: '',
+        currentTitle: '',
     });
 
     // Initialize edit state when project loads
@@ -127,13 +139,26 @@ export const ProjectDetail = () => {
         setActiveScreen('chatRoom');
     };
 
-    const handleSaveChanges = () => {
-        updateProject(project.id, {
-            instructions: editedInstructions.trim() || undefined,
-        });
+    const handleSaveChanges = async () => {
+        setIsSaving(true);
+        
+        try {
+            // Update the project (marks dirty)
+            updateProject(project.id, {
+                instructions: editedInstructions.trim() || undefined,
+            });
 
-        setHasChanges(false);
-        toast.success('Instructions updated!');
+            // Immediately trigger save instead of waiting for auto-save
+            await useProjectStore.getState().saveAllDirtyProjects();
+            
+            setHasChanges(false);
+            toast.success('Instructions saved!');
+        } catch (error) {
+            console.error('Failed to save instructions:', error);
+            toast.error('Failed to save instructions');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleSubmit = async (
@@ -281,12 +306,78 @@ export const ProjectDetail = () => {
                                         className={`cursor-pointer ${theme === 'dark' ? "hover:bg-foreground/5" : "hover:bg-accent"} transition-colors`}
                                         onClick={() => handleConversationClick(conv.id)}
                                     >
-                                        <ItemContent>
-                                            <ItemTitle className="line-clamp-1">
-                                                {conv.title}
-                                            </ItemTitle>
-                                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                                <span>Last message {formatTime(conv.updatedAt)}</span>
+                                        <ItemContent className="w-full">
+                                            <div className="flex items-center justify-between gap-4 w-full">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <ItemTitle className="line-clamp-1 mb-1">
+                                                            {conv.title}
+                                                        </ItemTitle>
+                                                        {conv.starred && (
+                                                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <span>Last message {formatTime(conv.updatedAt)}</span>
+                                                    </div>
+                                                </div>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger
+                                                        asChild
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0 hover:bg-accent-foreground/10"
+                                                        >
+                                                            <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleConversationStar(conv.id);
+                                                                toast.success(conv.starred ? 'Conversation unstarred' : 'Conversation starred');
+                                                            }}
+                                                        >
+                                                            <Star
+                                                                className={`h-4 w-4 mr-2 ${conv.starred
+                                                                    ? 'fill-yellow-400 text-yellow-400'
+                                                                    : ''
+                                                                }`}
+                                                            />
+                                                            {conv.starred ? 'Unstar' : 'Star'}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setRenameConvDialog({
+                                                                    isOpen: true,
+                                                                    conversationId: conv.id,
+                                                                    currentTitle: conv.title
+                                                                });
+                                                            }}
+                                                        >
+                                                            <Edit className="h-4 w-4 mr-2" />
+                                                            Rename
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (confirm('Are you sure you want to delete this conversation?')) {
+                                                                    deleteConversation(conv.id);
+                                                                    toast.success('Conversation deleted');
+                                                                }
+                                                            }}
+                                                            className="text-destructive"
+                                                        >
+                                                            <Trash2 className="h-4 w-4 mr-2" />
+                                                            Delete
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </div>
                                         </ItemContent>
                                     </Item>
@@ -405,10 +496,10 @@ export const ProjectDetail = () => {
                         <div className="pt-4">
                             <Button
                                 onClick={handleSaveChanges}
-                                disabled={!hasChanges}
+                                disabled={!hasChanges || isSaving}
                                 className="w-full"
                             >
-                                Save Instructions
+                                {isSaving ? 'Saving...' : 'Save Instructions'}
                             </Button>
                         </div>
                     </div>
@@ -465,6 +556,53 @@ export const ProjectDetail = () => {
                                 Cancel
                             </Button>
                             <Button onClick={handleSaveProjectInfo}>
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Rename Conversation Dialog */}
+            {renameConvDialog.isOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-background rounded-lg p-6 w-96">
+                        <h3 className="font-semibold mb-4">Rename Conversation</h3>
+                        <Input
+                            type="text"
+                            value={renameConvDialog.currentTitle}
+                            onChange={(e) => setRenameConvDialog(prev => ({
+                                ...prev,
+                                currentTitle: e.target.value
+                            }))}
+                            placeholder="Conversation title..."
+                            autoFocus
+                            className="mb-4"
+                        />
+                        <div className="flex gap-2 justify-end">
+                            <Button
+                                variant="outline"
+                                onClick={() => setRenameConvDialog({
+                                    isOpen: false,
+                                    conversationId: '',
+                                    currentTitle: ''
+                                })}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    if (renameConvDialog.currentTitle.trim()) {
+                                        renameConversation(renameConvDialog.conversationId, renameConvDialog.currentTitle);
+                                        setRenameConvDialog({
+                                            isOpen: false,
+                                            conversationId: '',
+                                            currentTitle: ''
+                                        });
+                                        toast.success('Conversation renamed!');
+                                    }
+                                }}
+                            >
                                 Save
                             </Button>
                         </div>

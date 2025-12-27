@@ -62,19 +62,22 @@ export class ConversationPersistenceService {
   /**
    * Delete a conversation from disk
    */
-  async deleteConversation(conversationId: string): Promise<void> {
+  async deleteConversation(conversation: LocalConversation): Promise<void> {
     try {
       if (!window.electronAPI) {
         console.warn(
           "Electron API not available, deleting from localStorage as fallback"
         );
-        this.deleteFromLocalStorage(conversationId);
+        this.deleteFromLocalStorage(conversation.id);
         return;
       }
 
-      await window.electronAPI.conversations.delete(conversationId);
-      this.isDirty.delete(conversationId);
-      console.log(`Deleted conversation: ${conversationId}`);
+      await window.electronAPI.conversations.delete(
+        conversation.id,
+        conversation.projectId
+      );
+      this.isDirty.delete(conversation.id);
+      console.log(`Deleted conversation: ${conversation.id}`);
     } catch (error) {
       console.error("Failed to delete conversation:", error);
       throw error;

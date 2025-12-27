@@ -13,6 +13,15 @@ export interface KnowledgeFile {
   uploadedAt: Date; // When the file was added
 }
 
+// For persistence (serializable version)
+export interface LocalKnowledgeFile {
+  id: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+  uploadedAt: string; // ISO string
+}
+
 export interface Project {
   id: string; // Unique identifier
   name: string; // Display name
@@ -30,7 +39,7 @@ export interface LocalProject {
   name: string;
   description?: string;
   instructions?: string;
-  knowledgeFiles: KnowledgeFile[];
+  knowledgeFiles: LocalKnowledgeFile[]; // Serializable version with string dates
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
   starred?: boolean;

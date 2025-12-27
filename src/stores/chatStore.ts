@@ -11,6 +11,57 @@ import type { MessageContent, MessageFileAttachment } from "@/types/multimodal";
 import { loadAssetAsBlob } from "@/utils/fileUtils";
 import { toolExecutor } from "@/services/toolExecutor";
 import type { ToolCall } from "@/types/tools";
+import { toast } from "sonner"; // 🆕 Toast notifications for error handling
+
+/**
+ * 📢 Helper function to handle and display tool-related errors
+ * Shows appropriate toast notifications based on error type
+ */
+function handleToolError(error: unknown, context: "execution" | "continuation") {
+  const errorMessage = error instanceof Error ? error.message : "Unknown error";
+  
+  // 🔍 Check for specific error patterns
+  const isModelNotSupported = errorMessage.toLowerCase().includes("tool") && 
+    (errorMessage.toLowerCase().includes("not supported") || 
+     errorMessage.toLowerCase().includes("doesn't support"));
+  
+  const isNetworkError = errorMessage.toLowerCase().includes("network") ||
+    errorMessage.toLowerCase().includes("fetch") ||
+    errorMessage.toLowerCase().includes("connection");
+  
+  const isAPIError = errorMessage.toLowerCase().includes("provider returned error") ||
+    errorMessage.toLowerCase().includes("api");
+  
+  // 📢 Show appropriate toast based on error type
+  if (isModelNotSupported) {
+    toast.error("Tool Calling Not Supported", {
+      description: "This model doesn't support tool calling. The response will continue without tools.",
+      duration: 5000,
+    });
+  } else if (isNetworkError) {
+    toast.error("Network Error", {
+      description: "Connection lost while using tools. Please check your internet and try again.",
+      duration: 5000,
+    });
+  } else if (isAPIError && context === "continuation") {
+    toast.error("Tool Result Error", {
+      description: "Failed to send tool results to the model. The conversation may be incomplete.",
+      duration: 5000,
+    });
+  } else if (context === "execution") {
+    toast.error("Tool Execution Failed", {
+      description: errorMessage || "An error occurred while executing tools. Please try again.",
+      duration: 5000,
+    });
+  } else {
+    toast.error("Tool Calling Error", {
+      description: errorMessage || "Something went wrong with tool calling.",
+      duration: 5000,
+    });
+  }
+  
+  console.error(`[Tool ${context} error]:`, error);
+}
 
 /**
  * Prepares conversation history for API submission
@@ -743,22 +794,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 🔧 Add tool definitions if any tools are enabled
       const { enabledTools } = useSettingsStore.getState();
       if (enabledTools.length > 0) {
-        // 🛡️ Check if model supports standard tool calling
-        // Gemini models require special "thought_signature" format that we don't support yet
-        const isGeminiModel = model.includes("google/gemini");
-        
-        if (!isGeminiModel) {
-          const toolDefinitions = toolExecutor.getToolDefinitions(enabledTools);
-          if (toolDefinitions.length > 0) {
-            requestParams.tools = toolDefinitions;
-            console.log(
-              `🔧 Added ${toolDefinitions.length} tool(s) to request:`,
-              toolDefinitions.map((t) => t.function.name)
-            );
-          }
-        } else {
+        const toolDefinitions = toolExecutor.getToolDefinitions(enabledTools);
+        if (toolDefinitions.length > 0) {
+          requestParams.tools = toolDefinitions;
           console.log(
-            "⚠️ Tool calling disabled for Gemini (requires thought_signature support)"
+            `🔧 Added ${toolDefinitions.length} tool(s) to request:`,
+            toolDefinitions.map((t) => t.function.name)
           );
         }
       }
@@ -815,11 +856,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               thinking
             );
           },
-          onToolCalls: async (toolCalls, finishReason) => {
+          onToolCalls: async (toolCalls, finishReason, reasoningDetails) => {
             // 🔧 STEP 4: Execute tools and continue conversation
             console.log(
               `🔧 Received ${toolCalls.length} tool call(s) from model`
             );
+
+            // 🆕 Log reasoning_details if present (for Gemini)
+            if (reasoningDetails && reasoningDetails.length > 0) {
+              console.log(
+                `🧠 Received ${reasoningDetails.length} reasoning detail(s) (for Gemini thought_signature)`
+              );
+            }
 
             try {
               // Execute all tools
@@ -872,6 +920,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                     arguments: tc.function.arguments,
                   },
                 })),
+                // 🆕 Include reasoning_details for Gemini thought_signature support
+                ...(reasoningDetails && reasoningDetails.length > 0
+                  ? { reasoning_details: reasoningDetails }
+                  : {}),
               });
 
               // 🔧 Add tool results
@@ -905,13 +957,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   {
                     model: continuationParams.model,
                     messageCount: continuationParams.messages.length,
-                    messages: continuationParams.messages.map((m: any, i: number) => ({
-                      index: i,
-                      role: m.role,
-                      hasContent: !!m.content,
-                      hasToolCalls: !!m.tool_calls,
-                      tool_call_id: m.tool_call_id,
-                    })),
+                    messages: continuationParams.messages.map(
+                      (m: any, i: number) => ({
+                        index: i,
+                        role: m.role,
+                        hasContent: !!m.content,
+                        hasToolCalls: !!m.tool_calls,
+                        tool_call_id: m.tool_call_id,
+                      })
+                    ),
                     toolsIncluded: !!continuationParams.tools,
                   },
                   null,
@@ -971,7 +1025,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                       error: error.message,
                       currentAbortController: null,
                     });
-                    console.error("Tool continuation error:", error);
+                    
+                    // 📢 Show user-friendly error toast
+                    handleToolError(error, "continuation");
 
                     // Remove failed message
                     set((state) => ({
@@ -991,7 +1047,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 abortController.signal
               );
             } catch (error) {
-              console.error("Failed to execute tools:", error);
+              // 📢 Show user-friendly error toast
+              handleToolError(error, "execution");
+              
               set({
                 isLoading: false,
                 error:

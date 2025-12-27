@@ -5,10 +5,26 @@
  * MODEL COMPATIBILITY:
  * ✅ Claude (all versions) - Full support
  * ✅ DeepSeek (all versions) - Full support
- * ❌ Gemini - NOT SUPPORTED (requires Google's proprietary "thought_signature" format)
- *    See: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens#preserving-reasoning-blocks
+ * ✅ Gemini (all versions) - Full support (via OpenRouter's reasoning_details normalization)
  * 
- * TODO: Implement Gemini thought_signature support
+ * GEMINI THOUGHT_SIGNATURE SUPPORT:
+ * Gemini requires "thought signatures" to be preserved during multi-turn tool calling.
+ * OpenRouter normalizes this into a unified `reasoning_details` field that we capture
+ * and pass back in continuation requests. This allows Gemini to maintain its reasoning
+ * state across tool execution steps.
+ * 
+ * Flow:
+ * 1. User: "What time is it?"
+ * 2. Model responds with: { tool_calls: [...], reasoning_details: [...] }
+ * 3. We capture BOTH tool_calls and reasoning_details
+ * 4. We execute tools and build continuation:
+ *    { 
+ *      messages: [
+ *        { role: "assistant", tool_calls: [...], reasoning_details: [...] },  ← Preserve!
+ *        { role: "tool", content: "..." }
+ *      ]
+ *    }
+ * 5. Model continues from saved state ✓
  */
 
 // ============================================================================

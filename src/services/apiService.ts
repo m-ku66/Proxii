@@ -58,6 +58,7 @@ export interface StreamChunk {
       content?: string;
       reasoning?: string; // Some models (like o1) send thinking here
       tool_calls?: ToolCallDelta[]; // Tool call deltas during streaming
+      reasoning_details?: any[]; // 🆕 OpenRouter's normalized reasoning format (for Gemini thought_signature)
     };
     finish_reason?: string | null;
   }>;
@@ -71,7 +72,11 @@ export interface StreamChunk {
 export interface StreamCallbacks {
   onContent?: (content: string) => void;
   onThinking?: (thinking: string) => void;
-  onToolCalls?: (toolCalls: ToolCall[], finishReason: string) => void; // Called when model requests tools
+  onToolCalls?: (
+    toolCalls: ToolCall[],
+    finishReason: string,
+    reasoningDetails?: any[] // 🆕 Pass reasoning_details to callback
+  ) => void;
   onComplete?: (usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -205,6 +210,12 @@ export async function sendChatCompletionStream(
     // We build up partial tool calls and convert to complete ToolCall[] at the end
     let accumulatedToolCalls: Map<number, Partial<ToolCall>> = new Map();
 
+    // 🆕 Accumulate reasoning_details (for Gemini thought_signature support)
+    let accumulatedReasoningDetails: any[] = [];
+
+    // 🛡️ Guard to prevent duplicate onToolCalls firing
+    let toolCallsHandled = false;
+
     // Read the stream
     while (true) {
       const { done, value } = await reader.read();
@@ -242,6 +253,18 @@ export async function sendChatCompletionStream(
             // Extract content and thinking from delta
             const delta = chunk.choices[0]?.delta;
             const finishReason = chunk.choices[0]?.finish_reason;
+
+            // 🆕 Capture reasoning_details for Gemini thought_signature support
+            if (
+              delta?.reasoning_details &&
+              Array.isArray(delta.reasoning_details)
+            ) {
+              accumulatedReasoningDetails.push(...delta.reasoning_details);
+              console.log(
+                "🧠 Reasoning details received:",
+                delta.reasoning_details
+              );
+            }
 
             // 🔧 Handle tool calls
             if (delta?.tool_calls) {
@@ -288,8 +311,11 @@ export async function sendChatCompletionStream(
             // 🔧 If finish_reason is "tool_calls", the model wants to use tools
             if (
               finishReason === "tool_calls" &&
-              accumulatedToolCalls.size > 0
+              accumulatedToolCalls.size > 0 &&
+              !toolCallsHandled // 🛡️ Only fire once per stream
             ) {
+              toolCallsHandled = true; // 🛡️ Set flag to prevent duplicates
+
               // Convert Map to array of tool calls (should be complete by now)
               const toolCallsArray = Array.from(
                 accumulatedToolCalls.values()
@@ -321,7 +347,13 @@ export async function sendChatCompletionStream(
               });
 
               if (validToolCalls.length > 0) {
-                callbacks.onToolCalls?.(validToolCalls, finishReason);
+                callbacks.onToolCalls?.(
+                  validToolCalls,
+                  finishReason,
+                  accumulatedReasoningDetails.length > 0
+                    ? accumulatedReasoningDetails
+                    : undefined // 🆕 Pass reasoning_details for Gemini
+                );
               } else {
                 console.error(
                   "❌ All tool calls were malformed! Original:",
